@@ -1,629 +1,411 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Elements Box App</title>
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+import React, { useState, useEffect } from 'react';
+import { Play, BookOpen, Users, LogOut, ChevronRight, UserCircle, Activity, Lock, Mail, Calendar, Video } from 'lucide-react';
 
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: { brand: { bg1: '#e5d3bd', bg2: '#d4bca0', dark: '#2a241f', surface: 'rgba(255, 255, 255, 0.45)' } },
-                    animation: {
-                        'fade-in': 'fadeIn 0.3s ease-out forwards',
-                        'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-                        'zoom-in': 'zoomIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-                    },
-                    keyframes: {
-                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
-                        slideUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
-                        zoomIn: { '0%': { opacity: '0', transform: 'scale(0.95) translateY(10px)' }, '100%': { opacity: '1', transform: 'scale(1) translateY(0)' } }
-                    }
-                }
-            }
+// --- CONFIGURACIÓN ---
+// Reemplaza esta URL con la que te dé Google Apps Script al implementar
+const GOOGLE_SCRIPT_URL = ""; 
+
+// --- COLORES BASADOS EN EL LOGO ---
+const colors = {
+  bg: 'bg-[#e5d3bd]', // Beige fondo
+  surface: 'bg-[#f0e3d1]', // Beige claro para tarjetas
+  textDark: 'text-[#2a241f]', // Marrón/Negro del texto y logo
+  accent: 'bg-[#2a241f]', // Fondo oscuro para botones
+  accentHover: 'hover:bg-[#403831]',
+};
+
+export default function ElementsBoxApp() {
+  const [user, setUser] = useState(null); // null, { name, role: 'admin'|'user' }
+  const [currentView, setCurrentView] = useState('login'); // login, register, dashboard, academy, blog, admin
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Estados de datos
+  const [videos, setVideos] = useState([]);
+  const [blogPosts, setBlogPosts] = useState([]);
+  const [usersList, setUsersList] = useState([]);
+
+  // Mock Data para mostrar si no hay URL conectada
+  const loadMockData = () => {
+    setVideos([
+      { Categoria: 'Gimnásticos', Nombre: 'Pull Ups estrictas', Descripcion: 'Aprende la técnica correcta paso a paso.', URL: 'https://www.youtube.com/watch?v=1' },
+      { Categoria: 'Halterofilia', Nombre: 'Clean & Jerk', Descripcion: 'Conceptos básicos para levantar seguro.', URL: 'https://www.youtube.com/watch?v=2' },
+      { Categoria: 'Metcon', Nombre: 'Burpees eficientes', Descripcion: 'Ahorra energía en tus WODs.', URL: 'https://www.youtube.com/watch?v=3' }
+    ]);
+    setBlogPosts([
+      { Titulo: 'Competencia Interna 2026', Descripcion: 'Inscríbete a nuestra competencia de aniversario este mes.', URL_Imagen: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&q=80&w=1000', Fecha: '15/06/2026' },
+      { Titulo: 'Nuevos Horarios de Open Box', Descripcion: 'Hemos ampliado los horarios para que no te pierdas ningún entreno.', URL_Imagen: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=1000', Fecha: '10/06/2026' }
+    ]);
+    setUsersList([
+      { Nombre: 'Juan Pérez', Correo: 'juan@test.com', Plan: 'Ilimitado', Estado: 'Activo' },
+      { Nombre: 'Ana Gómez', Correo: 'ana@test.com', Plan: '3 Días', Estado: 'Inactivo' }
+    ]);
+  };
+
+  // Función principal para comunicarse con Google Apps Script
+  const apiCall = async (action, payload) => {
+    if (!GOOGLE_SCRIPT_URL) {
+      console.warn("No hay URL de Google Script conectada. Usando simulador.");
+      return simulateApi(action, payload);
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' }, // Importante para evitar error de CORS en preflight
+        body: JSON.stringify({ action, payload })
+      });
+      const data = await response.json();
+      setLoading(false);
+      return data;
+    } catch (error) {
+      setLoading(false);
+      console.error("Error en API:", error);
+      return { status: 'error', message: 'Error de conexión con el servidor.' };
+    }
+  };
+
+  // Simulador local por si el usuario aún no conecta el Backend
+  const simulateApi = (action, payload) => {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        if (action === 'login') {
+          if (payload.email === 'admin@elements.com') resolve({ status: 'success', user: { name: 'Admin Elements', role: 'admin' }});
+          else resolve({ status: 'success', user: { name: 'Atleta Prueba', role: 'user', plan: 'Ilimitado', status: 'Activo' }});
+        } else if (action === 'register') {
+          resolve({ status: 'success', user: { name: payload.name, role: 'user', plan: 'Básico', status: 'Activo' }});
         }
-    </script>
-    <style>
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(42, 36, 31, 0.3); border-radius: 10px; }
-        body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
-        .glass-card { background: rgba(255, 255, 255, 0.5); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 10px 30px -10px rgba(0,0,0,0.1); }
-        .modal-overlay { background: rgba(20, 17, 14, 0.9); backdrop-filter: blur(8px); }
-        .hide-scroll::-webkit-scrollbar { display: none; }
-    </style>
-</head>
-<body class="bg-gradient-to-br from-brand-bg1 to-brand-bg2 min-h-screen text-brand-dark font-sans selection:bg-brand-dark selection:text-white">
+      }, 1000);
+    });
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    const email = e.target.email.value;
+    const password = e.target.password.value;
     
-    <div id="root"></div>
+    setLoading(true);
+    const res = await apiCall('login', { email, password });
+    if (res.status === 'success') {
+      setUser(res.user);
+      setCurrentView('dashboard');
+      fetchData(res.user.role);
+    } else {
+      setErrorMsg(res.message);
+      setLoading(false);
+    }
+  };
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    const name = e.target.name.value;
+    const email = e.target.email.value;
+    const password = e.target.password.value;
 
-        // --- ICONOS SVG ---
-        const Play = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>;
-        const BookOpen = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
-        const Users = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
-        const LogOut = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
-        const UserCircle = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>;
-        const Activity = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
-        const VideoIcon = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>;
-        const Search = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
-        const ChevronDown = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>;
-        const ChevronUp = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>;
-        const XIcon = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
-        const Trophy = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>;
-        const AlertCircle = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>;
+    setLoading(true);
+    const res = await apiCall('register', { name, email, password });
+    if (res.status === 'success') {
+      setUser(res.user);
+      setCurrentView('dashboard');
+      fetchData('user');
+    } else {
+      setErrorMsg(res.message);
+      setLoading(false);
+    }
+  };
 
-        // --- CONFIGURACIÓN ---
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx1q7_Mxg8fdtxlz-_whq6bGc8QbqJwTaaEkgyrGgMbnwPe8sHfNkShZgUQnTKWUT99/exec"; 
-        const API_SECRET = "ElementsBox_Seguridad_2026";
+  const fetchData = async (role) => {
+    if (!GOOGLE_SCRIPT_URL) {
+      loadMockData();
+      return;
+    }
+    const resVideos = await apiCall('getVideos', {});
+    if (resVideos.status === 'success') setVideos(resVideos.data);
 
-        // --- UTILIDADES GLOBALES ---
-        const normalizeKeys = (dataArray) => {
-            return dataArray.map(obj => {
-                const newObj = {};
-                for (let key in obj) newObj[key.trim()] = obj[key];
-                return newObj;
-            });
-        };
+    const resBlog = await apiCall('getBlog', {});
+    if (resBlog.status === 'success') setBlogPosts(resBlog.data);
 
-        const getVideoData = (url) => {
-            if (!url) return { type: null, id: null };
-            const ytMatch = url.match(/^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
-            if (ytMatch && ytMatch[2].length === 11) return { type: 'youtube', id: ytMatch[2] };
-            const driveMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
-            if (driveMatch) return { type: 'drive', id: driveMatch[1] };
-            return { type: null, id: null };
-        };
+    if (role === 'admin') {
+      const resUsers = await apiCall('getUsers', { role: 'admin' });
+      if (resUsers.status === 'success') setUsersList(resUsers.data);
+    }
+  };
 
-        // Extrae imágenes de Drive con el endpoint robusto lh3
-        const normalizeImageUrl = (url) => {
-            if (!url) return '';
-            const driveMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
-            if (driveMatch) return `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
-            return url;
-        };
+  // Helper para extraer ID de Youtube
+  const getYoutubeId = (url) => {
+    if (!url) return '';
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
 
+  // --- COMPONENTES UI ---
 
-        function ElementsBoxApp() {
-            const [user, setUser] = useState(null); 
-            const [currentView, setCurrentView] = useState('login'); 
-            const [loading, setLoading] = useState(false);
-            const [dataLoading, setDataLoading] = useState(false);
-            const [errorMsg, setErrorMsg] = useState('');
+  const Topbar = () => (
+    <div className={`${colors.accent} text-[#e5d3bd] p-4 flex justify-between items-center shadow-lg rounded-b-xl mb-6`}>
+      <div className="flex items-center gap-3 font-bold text-xl tracking-widest uppercase">
+        <Activity className="w-8 h-8" />
+        ELEMENTS BOX
+      </div>
+      {user && (
+        <button onClick={() => { setUser(null); setCurrentView('login'); }} className="flex items-center gap-2 hover:text-white transition-colors">
+          <LogOut className="w-5 h-5" />
+          <span className="hidden sm:inline">Salir</span>
+        </button>
+      )}
+    </div>
+  );
 
-            const [videos, setVideos] = useState([]);
-            const [blogPosts, setBlogPosts] = useState([]);
-            const [usersList, setUsersList] = useState([]);
-            const [rankingList, setRankingList] = useState([]);
+  const NavMenu = () => (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <button onClick={() => setCurrentView('dashboard')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'dashboard' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
+        <UserCircle className="w-6 h-6" /> Perfil
+      </button>
+      <button onClick={() => setCurrentView('academy')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'academy' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
+        <Video className="w-6 h-6" /> Academia
+      </button>
+      <button onClick={() => setCurrentView('blog')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'blog' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
+        <BookOpen className="w-6 h-6" /> Blog
+      </button>
+      {user?.role === 'admin' && (
+        <button onClick={() => setCurrentView('admin')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'admin' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
+          <Users className="w-6 h-6" /> Admin
+        </button>
+      )}
+    </div>
+  );
 
-            // Estados Modales Interfaz
-            const [searchTerm, setSearchTerm] = useState('');
-            const [expandedCategories, setExpandedCategories] = useState({});
-            const [selectedPost, setSelectedPost] = useState(null); 
-            const [selectedVideo, setSelectedVideo] = useState(null); 
-            const [restrictedPopup, setRestrictedPopup] = useState(false);
+  return (
+    <div className={`min-h-screen ${colors.bg} font-sans`}>
+      <div className="max-w-4xl mx-auto px-4 pb-12">
+        {(user || currentView !== 'login') && <Topbar />}
 
-            useEffect(() => {
-                const sessionUser = localStorage.getItem('elementsSession');
-                if(sessionUser) {
-                    const parsedUser = JSON.parse(sessionUser);
-                    setUser(parsedUser);
-                    setCurrentView('dashboard');
-                    fetchData(parsedUser.role);
-                }
-            }, []);
-
-            const apiCall = async (action, payload) => {
-                try {
-                    const response = await fetch(GOOGLE_SCRIPT_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'text/plain' }, 
-                        body: JSON.stringify({ action, payload, apiSecret: API_SECRET })
-                    });
-                    return await response.json();
-                } catch (error) {
-                    return { status: 'error', message: 'Error de conexión con el servidor.' };
-                }
-            };
-
-            const handleAuth = async (e, action) => {
-                e.preventDefault();
-                setErrorMsg('');
-                setLoading(true);
-                
-                let payload = { email: e.target.email.value, password: e.target.password.value };
-                
-                if (action === 'register') {
-                    payload = {
-                        ...payload,
-                        nombres: e.target.nombres.value,
-                        apellidos: e.target.apellidos.value,
-                        telefono: e.target.telefono.value,
-                        fechaNac: e.target.fechaNac.value
-                    };
-                }
-
-                const res = await apiCall(action, payload);
-                
-                if (res.status === 'success') {
-                    setUser(res.user);
-                    localStorage.setItem('elementsSession', JSON.stringify(res.user)); 
-                    setCurrentView('dashboard');
-                    fetchData(res.user.role);
-                } else {
-                    setErrorMsg(res.message);
-                }
-                setLoading(false);
-            };
-
-            const handleLogout = () => {
-                setUser(null);
-                setCurrentView('login');
-                localStorage.removeItem('elementsSession'); 
-            };
-
-            const handleNavigation = (view) => {
-                // Control de Accesos
-                if (['academy', 'ranking'].includes(view)) {
-                    if (user.role !== 'admin' && user.status !== 'Activo') {
-                        setRestrictedPopup(true);
-                        return;
-                    }
-                }
-                setCurrentView(view);
-                window.scrollTo(0, 0);
-            };
-
-            const fetchData = async (role) => {
-                setDataLoading(true);
-                
-                const resBlog = await apiCall('getBlog', {});
-                if (resBlog.status === 'success') setBlogPosts(normalizeKeys(resBlog.data));
-
-                if (role === 'admin' || user?.status === 'Activo') {
-                    const resVideos = await apiCall('getVideos', {});
-                    if (resVideos.status === 'success') {
-                        const cleanVideos = normalizeKeys(resVideos.data);
-                        setVideos(cleanVideos);
-                        if(cleanVideos.length > 0) setExpandedCategories({ [cleanVideos[0].Categoria || 'General']: true });
-                    }
-
-                    const resRanking = await apiCall('getRanking', {});
-                    if (resRanking.status === 'success') setRankingList(normalizeKeys(resRanking.data));
-                }
-
-                if (role === 'admin') {
-                    const resUsers = await apiCall('getUsers', { role: 'admin' });
-                    if (resUsers.status === 'success') setUsersList(normalizeKeys(resUsers.data));
-                }
-                setDataLoading(false);
-            };
-
-            const groupedFilteredVideos = useMemo(() => {
-                const lowerSearch = searchTerm.toLowerCase();
-                const filtered = videos.filter(v => {
-                    return (v.Nombre || '').toLowerCase().includes(lowerSearch) || (v.Descripcion || '').toLowerCase().includes(lowerSearch);
-                });
-                return filtered.reduce((acc, v) => {
-                    const cat = v.Categoria || 'General';
-                    if (!acc[cat]) acc[cat] = [];
-                    acc[cat].push(v);
-                    return acc;
-                }, {});
-            }, [videos, searchTerm]);
-
-            const toggleCategory = (cat) => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
-
-            // --- COMPONENTES ---
-            const Loader = () => (
-                <div className="flex justify-center items-center py-12">
-                    <div className="w-10 h-10 border-4 border-brand-dark border-t-transparent rounded-full animate-spin"></div>
+        {/* VISTAS DE AUTENTICACIÓN */}
+        {!user && currentView === 'login' && (
+          <div className="min-h-[80vh] flex flex-col items-center justify-center">
+             <div className="mb-8 flex flex-col items-center text-center">
+                <div className={`w-24 h-24 rounded-full ${colors.accent} flex items-center justify-center shadow-xl mb-4 border-4 border-[#f0e3d1]`}>
+                    <Activity className="w-12 h-12 text-[#e5d3bd]" />
                 </div>
-            );
+                <h1 className={`${colors.textDark} text-4xl font-black uppercase tracking-widest`}>Elements</h1>
+                <h2 className={`${colors.textDark} text-2xl font-light tracking-[0.3em]`}>BOX</h2>
+             </div>
+             
+             <div className={`${colors.surface} p-8 rounded-2xl shadow-xl w-full max-w-md border border-[#2a241f]/10`}>
+                <h3 className={`text-2xl font-bold ${colors.textDark} mb-6 text-center`}>Iniciar Sesión</h3>
+                {errorMsg && <div className="bg-red-100 text-red-800 p-3 rounded-lg mb-4 text-sm text-center">{errorMsg}</div>}
+                
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div>
+                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}><Mail className="inline w-4 h-4 mr-1"/>Correo Electrónico</label>
+                    <input type="email" name="email" required className="w-full p-3 rounded-lg border-2 border-transparent focus:border-[#2a241f] bg-white outline-none transition-all" placeholder="tu@correo.com" />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}><Lock className="inline w-4 h-4 mr-1"/>Contraseña</label>
+                    <input type="password" name="password" required className="w-full p-3 rounded-lg border-2 border-transparent focus:border-[#2a241f] bg-white outline-none transition-all" placeholder="••••••••" />
+                  </div>
+                  <button type="submit" disabled={loading} className={`w-full ${colors.accent} text-[#e5d3bd] p-3 rounded-lg font-bold text-lg mt-2 ${colors.accentHover} transition-colors shadow-md flex justify-center items-center`}>
+                    {loading ? 'Cargando...' : 'Entrar al Box'} <ChevronRight className="w-5 h-5 ml-1"/>
+                  </button>
+                </form>
 
-            const Topbar = () => (
-                <div className="sticky top-0 z-30 bg-brand-bg1/90 backdrop-blur-md px-6 py-4 flex justify-between items-center shadow-sm">
-                    <div className="flex items-center gap-2">
-                        <div className="bg-brand-dark p-2 rounded-lg"><Activity className="w-6 h-6 text-brand-bg1" /></div>
-                        <span className="font-black text-xl tracking-widest uppercase">Elements</span>
-                    </div>
-                    {user && (
-                        <button onClick={handleLogout} className="flex items-center gap-2 p-2 rounded-full hover:bg-black/5 transition-colors text-brand-dark/80 font-bold text-sm">
-                            <span className="hidden sm:inline">Cerrar Sesión</span><LogOut className="w-5 h-5" />
-                        </button>
+                <p className={`mt-6 text-center text-sm ${colors.textDark}`}>
+                  ¿Eres nuevo atleta? <button onClick={() => setCurrentView('register')} className="font-bold underline">Regístrate aquí</button>
+                </p>
+
+                {!GOOGLE_SCRIPT_URL && (
+                  <div className="mt-8 p-3 bg-yellow-100/50 border border-yellow-600/30 rounded-lg text-xs text-yellow-800 text-center">
+                    Modo Demo activo. Usa <b>admin@elements.com</b> para ver la vista de Administrador, o cualquier otro para vista de Atleta.
+                  </div>
+                )}
+             </div>
+          </div>
+        )}
+
+        {!user && currentView === 'register' && (
+          <div className="min-h-[80vh] flex flex-col items-center justify-center">
+             <div className={`${colors.surface} p-8 rounded-2xl shadow-xl w-full max-w-md border border-[#2a241f]/10`}>
+                <h3 className={`text-2xl font-bold ${colors.textDark} mb-6 text-center`}>Nuevo Atleta</h3>
+                {errorMsg && <div className="bg-red-100 text-red-800 p-3 rounded-lg mb-4 text-sm text-center">{errorMsg}</div>}
+                
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div>
+                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Nombre Completo</label>
+                    <input type="text" name="name" required className="w-full p-3 rounded-lg bg-white outline-none" placeholder="Juan Pérez" />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Correo Electrónico</label>
+                    <input type="email" name="email" required className="w-full p-3 rounded-lg bg-white outline-none" placeholder="tu@correo.com" />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Contraseña</label>
+                    <input type="password" name="password" required className="w-full p-3 rounded-lg bg-white outline-none" placeholder="••••••••" />
+                  </div>
+                  <button type="submit" disabled={loading} className={`w-full ${colors.accent} text-[#e5d3bd] p-3 rounded-lg font-bold text-lg mt-2 ${colors.accentHover} transition-colors shadow-md`}>
+                    {loading ? 'Creando...' : 'Crear Cuenta'}
+                  </button>
+                </form>
+                <p className={`mt-6 text-center text-sm ${colors.textDark}`}>
+                  ¿Ya tienes cuenta? <button onClick={() => setCurrentView('login')} className="font-bold underline">Inicia Sesión</button>
+                </p>
+             </div>
+          </div>
+        )}
+
+        {/* APLICACIÓN PRINCIPAL */}
+        {user && (
+          <>
+            <NavMenu />
+
+            {/* DASHBOARD (PERFIL) */}
+            {currentView === 'dashboard' && (
+              <div className={`${colors.surface} p-6 md:p-8 rounded-2xl shadow-lg border border-[#2a241f]/10`}>
+                <h2 className={`text-3xl font-black ${colors.textDark} mb-2 uppercase`}>¡Hola, {user.name}!</h2>
+                <p className={`${colors.textDark}/80 mb-8`}>Bienvenido a Elements Box.</p>
+                
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <h3 className={`font-bold ${colors.textDark} text-lg mb-4 flex items-center border-b pb-2`}><UserCircle className="mr-2"/> Datos de Cuenta</h3>
+                    <p className="mb-2"><span className="text-gray-500 text-sm">Rol:</span> <strong className="uppercase">{user.role}</strong></p>
+                    <p className="mb-2"><span className="text-gray-500 text-sm">Correo:</span> <strong>{user.email}</strong></p>
+                    {user.role === 'user' && (
+                      <>
+                        <p className="mb-2"><span className="text-gray-500 text-sm">Plan actual:</span> <span className="bg-[#2a241f] text-[#e5d3bd] px-2 py-1 rounded text-xs font-bold uppercase">{user.plan || 'Básico'}</span></p>
+                        <p className="mb-2"><span className="text-gray-500 text-sm">Estado:</span> <span className="text-green-600 font-bold">{user.status || 'Activo'}</span></p>
+                      </>
                     )}
+                  </div>
+
+                  <div className={`${colors.accent} text-[#e5d3bd] p-6 rounded-xl shadow-sm flex flex-col justify-center items-center text-center`}>
+                    <Activity className="w-16 h-16 mb-4 opacity-50" />
+                    <h3 className="font-bold text-xl mb-2">WOD del Día</h3>
+                    <p className="text-sm opacity-80">Revisa la sección de Blog para enterarte de las novedades o ve a la Academia para mejorar tu técnica.</p>
+                  </div>
                 </div>
-            );
+              </div>
+            )}
 
-            const BottomNav = () => (
-                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-md bg-brand-dark p-2 rounded-full shadow-2xl flex justify-between items-center z-40 border border-white/10">
-                    {['dashboard', 'academy', 'ranking', 'blog'].map(view => {
-                        const isApp = currentView === view;
-                        const icons = { dashboard: UserCircle, academy: VideoIcon, ranking: Trophy, blog: BookOpen };
-                        const labels = { dashboard: 'Perfil', academy: 'Aprende', ranking: 'Ranking', blog: 'Blog' };
-                        const Icon = icons[view];
-
-                        return (
-                            <button key={view} onClick={() => handleNavigation(view)} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${isApp ? 'bg-brand-bg1 w-28' : 'text-white/50 hover:text-white flex-1'}`}>
-                                <Icon className={`w-5 h-5 ${isApp ? 'text-brand-dark' : ''}`} />
-                                {isApp && <span className="ml-1.5 text-xs font-black text-brand-dark uppercase tracking-wider animate-fade-in">{labels[view]}</span>}
-                            </button>
-                        );
+            {/* ACADEMIA (VIDEOS YOUTUBE) */}
+            {currentView === 'academy' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><Play className="mr-3 w-8 h-8"/> Academia Elements</h2>
+                </div>
+                
+                {videos.length === 0 ? (
+                   <p className="text-center py-10 opacity-60">Aún no hay videos subidos.</p>
+                ) : (
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {videos.map((vid, idx) => {
+                      const ytId = getYoutubeId(vid.URL || '');
+                      return (
+                        <div key={idx} className={`${colors.surface} rounded-xl overflow-hidden shadow-lg border border-[#2a241f]/10 flex flex-col`}>
+                          {ytId ? (
+                            <div className="relative w-full pt-[56.25%] bg-black">
+                              <iframe 
+                                className="absolute top-0 left-0 w-full h-full"
+                                src={`https://www.youtube.com/embed/${ytId}`} 
+                                title={vid.Nombre}
+                                frameBorder="0" 
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                allowFullScreen
+                              ></iframe>
+                            </div>
+                          ) : (
+                            <div className="w-full h-48 bg-gray-300 flex items-center justify-center text-gray-500">Video no válido</div>
+                          )}
+                          <div className="p-5 flex-1 flex flex-col">
+                            <span className="text-xs font-bold text-[#2a241f]/60 uppercase tracking-wider mb-1">{vid.Categoria}</span>
+                            <h3 className={`text-xl font-bold ${colors.textDark} mb-2`}>{vid.Nombre}</h3>
+                            <p className="text-sm text-gray-700 mt-auto">{vid.Descripcion}</p>
+                          </div>
+                        </div>
+                      )
                     })}
-                    {user?.role === 'admin' && (
-                        <button onClick={() => handleNavigation('admin')} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${currentView === 'admin' ? 'bg-brand-bg1 w-28' : 'text-white/50 hover:text-white flex-1'}`}>
-                            <Users className={`w-5 h-5 ${currentView === 'admin' ? 'text-brand-dark' : ''}`} />
-                            {currentView === 'admin' && <span className="ml-1.5 text-xs font-black text-brand-dark uppercase tracking-wider animate-fade-in">Admin</span>}
-                        </button>
-                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* BLOG (NOTICIAS / EVENTOS) */}
+            {currentView === 'blog' && (
+              <div className="space-y-6">
+                <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><BookOpen className="mr-3 w-8 h-8"/> Novedades</h2>
+                
+                {blogPosts.length === 0 ? (
+                   <p className="text-center py-10 opacity-60">Aún no hay publicaciones.</p>
+                ) : (
+                  <div className="grid md:grid-cols-2 gap-8">
+                    {blogPosts.map((post, idx) => (
+                      <div key={idx} className={`bg-white rounded-2xl overflow-hidden shadow-xl border border-transparent hover:border-[#2a241f]/30 transition-all group`}>
+                        {post.URL_Imagen && (
+                          <div className="h-56 overflow-hidden">
+                            <img src={post.URL_Imagen} alt={post.Titulo} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                          </div>
+                        )}
+                        <div className="p-6">
+                          <div className="flex items-center text-xs font-bold text-[#2a241f]/50 mb-3">
+                            <Calendar className="w-4 h-4 mr-1"/> {post.Fecha || 'Reciente'}
+                          </div>
+                          <h3 className={`text-2xl font-black ${colors.textDark} mb-3 leading-tight`}>{post.Titulo}</h3>
+                          <p className="text-gray-600 leading-relaxed">{post.Descripcion}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* PANEL DE ADMINISTRADOR */}
+            {currentView === 'admin' && user?.role === 'admin' && (
+              <div className="space-y-6">
+                <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><Users className="mr-3 w-8 h-8"/> Gestión de Atletas</h2>
+                
+                <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-[#2a241f]/10">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className={`${colors.accent} text-[#e5d3bd] uppercase text-sm`}>
+                          <th className="p-4 font-semibold">Nombre</th>
+                          <th className="p-4 font-semibold">Correo</th>
+                          <th className="p-4 font-semibold">Plan</th>
+                          <th className="p-4 font-semibold">Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {usersList.length === 0 ? (
+                          <tr><td colSpan="4" className="p-4 text-center text-gray-500">No hay atletas registrados aún.</td></tr>
+                        ) : (
+                          usersList.map((u, idx) => (
+                            <tr key={idx} className="border-b hover:bg-[#f0e3d1]/50 transition-colors">
+                              <td className="p-4 font-bold ${colors.textDark}">{u.Nombre}</td>
+                              <td className="p-4 text-gray-600">{u.Correo}</td>
+                              <td className="p-4"><span className="bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded font-bold">{u.Plan || 'N/A'}</span></td>
+                              <td className="p-4">
+                                <span className={`text-xs px-2 py-1 rounded font-bold ${u.Estado === 'Activo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                  {u.Estado || 'N/A'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="p-4 bg-gray-50 text-xs text-gray-500 border-t">
+                    <p>Nota: Para editar planes, eliminar usuarios o agregar videos y blog, debes hacerlo directamente en la <b>Hoja de Google Sheets</b>. Los cambios se reflejarán aquí automáticamente.</p>
+                  </div>
                 </div>
-            );
+              </div>
+            )}
 
-            return (
-                <div className="relative font-sans pb-32">
-                    {(user || currentView !== 'login') && <Topbar />}
-
-                    <div className="max-w-4xl mx-auto px-4 pt-6">
-                        
-                        {/* --- LOGIN & REGISTRO --- */}
-                        {!user && (currentView === 'login' || currentView === 'register') && (
-                            <div className="min-h-[85vh] flex flex-col items-center justify-center animate-slide-up py-10">
-                                <div className="mb-8 flex flex-col items-center">
-                                    <div className="w-24 h-24 rounded-3xl bg-brand-dark flex items-center justify-center shadow-2xl mb-4 rotate-3"><Activity className="w-12 h-12 text-brand-bg1 -rotate-3" /></div>
-                                    <h1 className="text-4xl font-black uppercase tracking-widest text-brand-dark drop-shadow-sm">Elements</h1>
-                                    <h2 className="text-xl font-medium tracking-[0.4em] text-brand-dark/70">TRAINING BOX</h2>
-                                </div>
-                                
-                                <div className="glass-card p-6 sm:p-8 rounded-[2rem] w-full max-w-md">
-                                    <h3 className="text-2xl font-black mb-6 text-center">{currentView === 'login' ? 'Bienvenido' : 'Crear Cuenta'}</h3>
-                                    {errorMsg && <div className="bg-red-500/10 text-red-700 p-3 rounded-xl mb-6 text-sm font-bold text-center border border-red-500/20">{errorMsg}</div>}
-                                    
-                                    <form onSubmit={(e) => handleAuth(e, currentView)} className="space-y-4">
-                                        {currentView === 'register' && (
-                                            <>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-brand-dark/60 mb-1 ml-1 uppercase">Nombres</label>
-                                                        <input type="text" name="nombres" required className="w-full p-3.5 rounded-xl bg-white/60 focus:bg-white outline-none transition-all text-sm font-bold" placeholder="Juan" />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-brand-dark/60 mb-1 ml-1 uppercase">Apellidos</label>
-                                                        <input type="text" name="apellidos" required className="w-full p-3.5 rounded-xl bg-white/60 focus:bg-white outline-none transition-all text-sm font-bold" placeholder="Pérez" />
-                                                    </div>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-brand-dark/60 mb-1 ml-1 uppercase">Teléfono</label>
-                                                        <input type="tel" name="telefono" required className="w-full p-3.5 rounded-xl bg-white/60 focus:bg-white outline-none transition-all text-sm font-bold" placeholder="3001234567" />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-brand-dark/60 mb-1 ml-1 uppercase">Nacimiento</label>
-                                                        <input type="date" name="fechaNac" required className="w-full p-3.5 rounded-xl bg-white/60 focus:bg-white outline-none transition-all text-sm font-bold text-brand-dark/80" />
-                                                    </div>
-                                                </div>
-                                            </>
-                                        )}
-                                        <div>
-                                            <label className="block text-[10px] font-black text-brand-dark/60 mb-1 ml-1 uppercase">Correo Electrónico</label>
-                                            <input type="email" name="email" required className="w-full p-3.5 rounded-xl bg-white/60 focus:bg-white outline-none transition-all font-bold" placeholder="tu@correo.com" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-brand-dark/60 mb-1 ml-1 uppercase">Contraseña</label>
-                                            <input type="password" name="password" required className="w-full p-3.5 rounded-xl bg-white/60 focus:bg-white outline-none transition-all font-bold" placeholder="••••••••" />
-                                        </div>
-                                        <button type="submit" disabled={loading} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black text-lg mt-4 hover:scale-[1.02] active:scale-95 transition-all shadow-xl">
-                                            {loading ? 'Procesando...' : (currentView === 'login' ? 'Entrar al Box' : 'Registrarme')}
-                                        </button>
-                                    </form>
-                                    <div className="mt-8 text-center">
-                                        <button onClick={() => setCurrentView(currentView === 'login' ? 'register' : 'login')} className="text-sm font-bold text-brand-dark/80 hover:text-brand-dark underline decoration-2 underline-offset-4">
-                                            {currentView === 'login' ? '¿Nuevo? Regístrate aquí' : 'Ya tengo cuenta, iniciar sesión'}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {user && (
-                            <div className="animate-slide-up space-y-8">
-                                
-                                {/* DASHBOARD */}
-                                {currentView === 'dashboard' && (
-                                    <div className="space-y-6">
-                                        <div className="flex items-end justify-between px-2">
-                                            <div>
-                                                <p className="text-sm font-bold text-brand-dark/50 uppercase tracking-wider">Tu Perfil</p>
-                                                <h2 className="text-4xl font-black uppercase leading-none mt-1">{user.name.split(' ')[0]}</h2>
-                                            </div>
-                                            <div className="w-14 h-14 bg-brand-dark text-brand-bg1 rounded-full flex items-center justify-center font-black text-2xl shadow-lg ring-4 ring-white/30">
-                                                {user.name.charAt(0).toUpperCase()}
-                                            </div>
-                                        </div>
-
-                                        <div className="glass-card rounded-[2rem] p-6 relative overflow-hidden">
-                                            <div className="flex flex-col gap-4 relative z-10">
-                                                <div className="bg-white/50 p-5 rounded-2xl flex justify-between items-center shadow-inner">
-                                                    <div>
-                                                        <p className="text-[10px] font-black text-brand-dark/50 uppercase tracking-wider">Suscripción</p>
-                                                        <p className="text-2xl font-black uppercase">{user.plan || 'Ninguno'}</p>
-                                                    </div>
-                                                    <div className={`px-5 py-2.5 rounded-full text-xs font-black uppercase shadow-md ${user.status === 'Activo' ? 'bg-green-500 text-white' : (user.status === 'Aspirante' ? 'bg-yellow-500 text-white' : 'bg-red-500 text-white')}`}>
-                                                        {user.status || 'Aspirante'}
-                                                    </div>
-                                                </div>
-                                                
-                                                {user.status !== 'Activo' && (
-                                                    <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl flex items-start gap-3">
-                                                        <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                                                        <p className="text-sm font-bold text-red-800">Tu cuenta no está activa. Renueva tu membresía en recepción para acceder a rutinas y rankings.</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-brand-dark text-brand-bg1 rounded-[2rem] p-6 text-center shadow-xl cursor-pointer hover:scale-[1.02] transition-transform flex flex-col items-center justify-center" onClick={() => handleNavigation('academy')}>
-                                                <Play className="w-10 h-10 mb-3 opacity-80" />
-                                                <h3 className="font-black uppercase text-sm">Academia</h3>
-                                            </div>
-                                            <div className="bg-white/40 border border-white/60 text-brand-dark rounded-[2rem] p-6 text-center shadow-xl cursor-pointer hover:scale-[1.02] transition-transform flex flex-col items-center justify-center" onClick={() => handleNavigation('ranking')}>
-                                                <Trophy className="w-10 h-10 mb-3 opacity-80" />
-                                                <h3 className="font-black uppercase text-sm">Ranking</h3>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* ACADEMIA */}
-                                {currentView === 'academy' && (
-                                    <div className="space-y-6">
-                                        <div className="px-2">
-                                            <h2 className="text-4xl font-black uppercase leading-none mt-1">Academia</h2>
-                                            <p className="text-sm font-bold text-brand-dark/50 mt-2">Domina tu técnica</p>
-                                        </div>
-
-                                        <div className="relative">
-                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-dark/50" />
-                                            <input 
-                                                type="text" 
-                                                placeholder="Buscar movimiento..." 
-                                                value={searchTerm}
-                                                onChange={(e) => setSearchTerm(e.target.value)}
-                                                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white/60 focus:bg-white outline-none transition-all shadow-inner font-bold text-brand-dark"
-                                            />
-                                        </div>
-
-                                        {dataLoading ? <Loader /> : (
-                                            Object.keys(groupedFilteredVideos).length === 0 ? (
-                                                <div className="glass-card p-12 rounded-[2rem] text-center">
-                                                    <VideoIcon className="w-12 h-12 mx-auto opacity-20 mb-4" />
-                                                    <p className="font-bold opacity-60">No se encontraron videos.</p>
-                                                </div>
-                                            ) : (
-                                                <div className="space-y-4">
-                                                    {Object.keys(groupedFilteredVideos).map((category, catIdx) => (
-                                                        <div key={catIdx} className="glass-card rounded-[1.5rem] overflow-hidden">
-                                                            <button onClick={() => toggleCategory(category)} className="w-full p-5 flex justify-between items-center hover:bg-white/40 transition-colors">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="bg-brand-dark text-brand-bg1 w-7 h-7 rounded-full flex items-center justify-center font-black text-xs shadow-inner">
-                                                                        {groupedFilteredVideos[category].length}
-                                                                    </div>
-                                                                    <h3 className="font-black text-lg uppercase tracking-wider">{category}</h3>
-                                                                </div>
-                                                                {expandedCategories[category] ? <ChevronUp className="w-5 h-5 opacity-50"/> : <ChevronDown className="w-5 h-5 opacity-50"/>}
-                                                            </button>
-
-                                                            {expandedCategories[category] && (
-                                                                <div className="p-4 grid grid-cols-1 gap-4 bg-black/5 animate-fade-in border-t border-white/20">
-                                                                    {groupedFilteredVideos[category].map((vid, vIdx) => {
-                                                                        const url = vid.URL || '';
-                                                                        const videoInfo = getVideoData(url);
-                                                                        
-                                                                        return (
-                                                                            <div key={vIdx} onClick={() => setSelectedVideo(videoInfo)} className="bg-white rounded-2xl p-4 flex items-center gap-4 shadow-sm cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all">
-                                                                                <div className="w-16 h-16 shrink-0 bg-brand-dark/10 rounded-xl flex items-center justify-center relative overflow-hidden group">
-                                                                                    <Play className="w-6 h-6 text-brand-dark group-hover:scale-125 transition-transform" />
-                                                                                </div>
-                                                                                <div>
-                                                                                    <h4 className="font-black text-lg leading-tight uppercase mb-1">{vid.Nombre}</h4>
-                                                                                    <p className="text-xs text-brand-dark/60 font-bold line-clamp-1">{vid.Descripcion}</p>
-                                                                                </div>
-                                                                            </div>
-                                                                        )
-                                                                    })}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* BLOG */}
-                                {currentView === 'blog' && (
-                                    <div className="space-y-6">
-                                        <div className="px-2">
-                                            <h2 className="text-4xl font-black uppercase leading-none mt-1">Blog Box</h2>
-                                            <p className="text-sm font-bold text-brand-dark/50 mt-2">Noticias y Comunidad</p>
-                                        </div>
-
-                                        {dataLoading ? <Loader /> : (
-                                            blogPosts.length === 0 ? (
-                                                <div className="glass-card p-12 rounded-[2rem] text-center">
-                                                    <BookOpen className="w-12 h-12 mx-auto opacity-20 mb-4" />
-                                                    <p className="font-bold opacity-60">No hay publicaciones recientes.</p>
-                                                </div>
-                                            ) : (
-                                                <div className="grid grid-cols-1 gap-8">
-                                                    {blogPosts.map((post, idx) => {
-                                                        const imgUrl = normalizeImageUrl(post.URL_Imagen);
-                                                        return (
-                                                            <div key={idx} onClick={() => setSelectedPost({...post, cleanImg: imgUrl})} className="glass-card rounded-[2rem] overflow-hidden group hover:shadow-2xl transition-all duration-300 relative cursor-pointer flex flex-col">
-                                                                {imgUrl && (
-                                                                    <div className="h-48 sm:h-64 w-full relative overflow-hidden">
-                                                                        <img src={imgUrl} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="News" />
-                                                                    </div>
-                                                                )}
-                                                                <div className="p-6 bg-white/60 flex-1 flex flex-col">
-                                                                    <div className="flex justify-between items-start mb-3">
-                                                                        <span className="bg-brand-dark text-brand-bg1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">{post.Etiqueta || 'Novedad'}</span>
-                                                                        <span className="text-[10px] font-bold text-brand-dark/50 uppercase">{post.Fecha}</span>
-                                                                    </div>
-                                                                    <h3 className="text-2xl font-black leading-tight mb-2">{post.Titulo}</h3>
-                                                                    <p className="font-medium text-brand-dark/70 text-sm mb-4 line-clamp-2">{post['Descripcion Corta'] || post.Descripcion}</p>
-                                                                    <div className="mt-auto flex justify-between items-center pt-4 border-t border-brand-dark/10">
-                                                                        <span className="text-xs font-bold text-brand-dark/60">{post.Autor || 'Elements'}</span>
-                                                                        <span className="text-xs font-black uppercase text-brand-dark flex items-center">Leer más <Play className="w-3 h-3 ml-1"/></span>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        )
-                                                    })}
-                                                </div>
-                                            )
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* RANKING */}
-                                {currentView === 'ranking' && (
-                                    <div className="space-y-6">
-                                        <div className="px-2">
-                                            <h2 className="text-4xl font-black uppercase leading-none mt-1">Leaderboard</h2>
-                                            <p className="text-sm font-bold text-brand-dark/50 mt-2">Puntuación Atletas Activos</p>
-                                        </div>
-
-                                        <div className="glass-card rounded-[2rem] overflow-hidden">
-                                            <table className="w-full text-left border-collapse">
-                                                <thead>
-                                                    <tr className="bg-brand-dark text-brand-bg1 text-[10px] uppercase font-black tracking-widest">
-                                                        <th className="p-4 pl-6 w-16 text-center">POS</th>
-                                                        <th className="p-4">Atleta</th>
-                                                        <th className="p-4 pr-6 text-right">Pts</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="text-sm">
-                                                    {dataLoading ? <tr><td colSpan="3"><Loader/></td></tr> : 
-                                                    (rankingList.length === 0 ? (
-                                                        <tr><td colSpan="3" className="p-8 text-center text-brand-dark/50 font-bold">Aún no hay puntuaciones.</td></tr>
-                                                    ) : (
-                                                        [...rankingList].sort((a,b) => (b.Puntos || 0) - (a.Puntos || 0)).map((r, idx) => (
-                                                            <tr key={idx} className="border-b border-white/30 hover:bg-white/50 transition-colors">
-                                                                <td className="p-4 pl-6 text-center font-black text-xl text-brand-dark/40">{idx + 1}</td>
-                                                                <td className="p-4 font-black uppercase">{r.Nombre || r.Nombres}</td>
-                                                                <td className="p-4 pr-6 text-right font-black text-xl">{r.Puntos || 0}</td>
-                                                            </tr>
-                                                        ))
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                )}
-
-                            </div>
-                        )}
-
-                        {/* NAVBAR INFERIOR */}
-                        {user && <BottomNav />}
-
-                        {/* --- MODALES PANTALLA COMPLETA --- */}
-
-                        {/* MODAL BLOG */}
-                        {selectedPost && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 modal-overlay animate-fade-in" onClick={() => setSelectedPost(null)}>
-                                <div className="bg-brand-bg1 w-full h-full max-h-[90vh] max-w-4xl rounded-[2rem] overflow-hidden shadow-2xl relative animate-zoom-in flex flex-col" onClick={e => e.stopPropagation()}>
-                                    
-                                    <button onClick={() => setSelectedPost(null)} className="absolute top-4 right-4 z-20 bg-brand-bg1/80 backdrop-blur text-brand-dark p-2 rounded-full shadow-lg">
-                                        <XIcon className="w-6 h-6" />
-                                    </button>
-
-                                    <div className="flex-1 overflow-y-auto hide-scroll">
-                                        {selectedPost.cleanImg && (
-                                            <div className="w-full h-64 sm:h-80 shrink-0 bg-brand-dark relative">
-                                                <img src={selectedPost.cleanImg} className="w-full h-full object-cover" alt="Detalle" />
-                                            </div>
-                                        )}
-                                        <div className="p-6 sm:p-10">
-                                            <div className="flex gap-3 mb-4">
-                                                <span className="bg-brand-dark text-brand-bg1 px-3 py-1 rounded-full text-xs font-black uppercase">{selectedPost.Etiqueta || 'Novedad'}</span>
-                                                <span className="text-brand-dark/50 text-xs font-bold uppercase py-1">{selectedPost.Fecha}</span>
-                                            </div>
-                                            <h2 className="text-3xl sm:text-5xl font-black text-brand-dark leading-tight mb-6">{selectedPost.Titulo}</h2>
-                                            
-                                            <div className="prose prose-brand max-w-none text-brand-dark/90 font-medium leading-relaxed whitespace-pre-wrap text-base sm:text-lg">
-                                                {selectedPost.Contenido || selectedPost.Descripcion}
-                                            </div>
-                                            
-                                            <div className="mt-10 pt-6 border-t border-brand-dark/10 flex items-center gap-4">
-                                                <div className="w-10 h-10 bg-brand-dark rounded-full flex items-center justify-center text-brand-bg1 font-black">{selectedPost.Autor ? selectedPost.Autor.charAt(0) : 'E'}</div>
-                                                <div>
-                                                    <p className="text-[10px] uppercase font-black text-brand-dark/50">Escrito por</p>
-                                                    <p className="font-black">{selectedPost.Autor || 'Equipo Elements'}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* MODAL VIDEO */}
-                        {selectedVideo && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 modal-overlay animate-fade-in" onClick={() => setSelectedVideo(null)}>
-                                <div className="bg-black w-full max-w-5xl aspect-video rounded-2xl sm:rounded-[2rem] overflow-hidden shadow-2xl relative animate-zoom-in" onClick={e => e.stopPropagation()}>
-                                    <button onClick={() => setSelectedVideo(null)} className="absolute -top-10 right-0 sm:top-4 sm:right-4 z-20 text-white p-2">
-                                        <XIcon className="w-8 h-8" />
-                                    </button>
-                                    
-                                    {selectedVideo.type === 'youtube' && (
-                                        <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${selectedVideo.id}?autoplay=1`} allow="autoplay; fullscreen" allowFullScreen></iframe>
-                                    )}
-                                    {selectedVideo.type === 'drive' && (
-                                        <iframe className="w-full h-full" src={`https://drive.google.com/file/d/${selectedVideo.id}/preview`} allow="autoplay; fullscreen" allowFullScreen></iframe>
-                                    )}
-                                    {!selectedVideo.type && (
-                                        <div className="w-full h-full flex items-center justify-center text-white/50 font-bold">Video no disponible</div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* POPUP DE RESTRICCIÓN (ASPIRANTES/INACTIVOS) */}
-                        {restrictedPopup && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay animate-fade-in" onClick={() => setRestrictedPopup(false)}>
-                                <div className="bg-brand-bg1 w-full max-w-sm rounded-[2rem] p-8 text-center shadow-2xl relative animate-zoom-in border-4 border-brand-dark/10" onClick={e => e.stopPropagation()}>
-                                    <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                                        <Lock className="w-10 h-10 text-red-600" />
-                                    </div>
-                                    <h3 className="text-2xl font-black uppercase mb-3 text-brand-dark">Acceso Restringido</h3>
-                                    <p className="font-medium text-brand-dark/80 mb-8 leading-relaxed">
-                                        Para acceder a la academia de movimientos y ver el ranking, necesitas renovar o adquirir tu suscripción en recepción.
-                                    </p>
-                                    <button onClick={() => setRestrictedPopup(false)} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black text-lg hover:scale-[1.02] active:scale-95 transition-transform shadow-lg">
-                                        Entendido
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                    </div>
-                </div>
-            );
-        }
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<ElementsBoxApp />);
-    </script>
-</body>
-</html>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
