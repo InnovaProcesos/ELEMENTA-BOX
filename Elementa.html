@@ -1,411 +1,401 @@
-import React, { useState, useEffect } from 'react';
-import { Play, BookOpen, Users, LogOut, ChevronRight, UserCircle, Activity, Lock, Mail, Calendar, Video } from 'lucide-react';
-
-// --- CONFIGURACIÓN ---
-// Reemplaza esta URL con la que te dé Google Apps Script al implementar
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx1q7_Mxg8fdtxlz-_whq6bGc8QbqJwTaaEkgyrGgMbnwPe8sHfNkShZgUQnTKWUT99/exec"; 
-
-// --- COLORES BASADOS EN EL LOGO ---
-const colors = {
-  bg: 'bg-[#e5d3bd]', // Beige fondo
-  surface: 'bg-[#f0e3d1]', // Beige claro para tarjetas
-  textDark: 'text-[#2a241f]', // Marrón/Negro del texto y logo
-  accent: 'bg-[#2a241f]', // Fondo oscuro para botones
-  accentHover: 'hover:bg-[#403831]',
-};
-
-export default function ElementsBoxApp() {
-  const [user, setUser] = useState(null); // null, { name, role: 'admin'|'user' }
-  const [currentView, setCurrentView] = useState('login'); // login, register, dashboard, academy, blog, admin
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-
-  // Estados de datos
-  const [videos, setVideos] = useState([]);
-  const [blogPosts, setBlogPosts] = useState([]);
-  const [usersList, setUsersList] = useState([]);
-
-  // Mock Data para mostrar si no hay URL conectada
-  const loadMockData = () => {
-    setVideos([
-      { Categoria: 'Gimnásticos', Nombre: 'Pull Ups estrictas', Descripcion: 'Aprende la técnica correcta paso a paso.', URL: 'https://www.youtube.com/watch?v=1' },
-      { Categoria: 'Halterofilia', Nombre: 'Clean & Jerk', Descripcion: 'Conceptos básicos para levantar seguro.', URL: 'https://www.youtube.com/watch?v=2' },
-      { Categoria: 'Metcon', Nombre: 'Burpees eficientes', Descripcion: 'Ahorra energía en tus WODs.', URL: 'https://www.youtube.com/watch?v=3' }
-    ]);
-    setBlogPosts([
-      { Titulo: 'Competencia Interna 2026', Descripcion: 'Inscríbete a nuestra competencia de aniversario este mes.', URL_Imagen: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&q=80&w=1000', Fecha: '15/06/2026' },
-      { Titulo: 'Nuevos Horarios de Open Box', Descripcion: 'Hemos ampliado los horarios para que no te pierdas ningún entreno.', URL_Imagen: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=1000', Fecha: '10/06/2026' }
-    ]);
-    setUsersList([
-      { Nombre: 'Juan Pérez', Correo: 'juan@test.com', Plan: 'Ilimitado', Estado: 'Activo' },
-      { Nombre: 'Ana Gómez', Correo: 'ana@test.com', Plan: '3 Días', Estado: 'Inactivo' }
-    ]);
-  };
-
-  // Función principal para comunicarse con Google Apps Script
-  const apiCall = async (action, payload) => {
-    if (!GOOGLE_SCRIPT_URL) {
-      console.warn("No hay URL de Google Script conectada. Usando simulador.");
-      return simulateApi(action, payload);
-    }
-
-    try {
-      setLoading(true);
-      const response = await fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' }, // Importante para evitar error de CORS en preflight
-        body: JSON.stringify({ action, payload })
-      });
-      const data = await response.json();
-      setLoading(false);
-      return data;
-    } catch (error) {
-      setLoading(false);
-      console.error("Error en API:", error);
-      return { status: 'error', message: 'Error de conexión con el servidor.' };
-    }
-  };
-
-  // Simulador local por si el usuario aún no conecta el Backend
-  const simulateApi = (action, payload) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        if (action === 'login') {
-          if (payload.email === 'admin@elements.com') resolve({ status: 'success', user: { name: 'Admin Elements', role: 'admin' }});
-          else resolve({ status: 'success', user: { name: 'Atleta Prueba', role: 'user', plan: 'Ilimitado', status: 'Activo' }});
-        } else if (action === 'register') {
-          resolve({ status: 'success', user: { name: payload.name, role: 'user', plan: 'Básico', status: 'Activo' }});
-        }
-      }, 1000);
-    });
-  };
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setErrorMsg('');
-    const email = e.target.email.value;
-    const password = e.target.password.value;
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elements Box App</title>
     
-    setLoading(true);
-    const res = await apiCall('login', { email, password });
-    if (res.status === 'success') {
-      setUser(res.user);
-      setCurrentView('dashboard');
-      fetchData(res.user.role);
-    } else {
-      setErrorMsg(res.message);
-      setLoading(false);
-    }
-  };
+    <!-- Tailwind CSS para los estilos -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React y ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Babel para compilar el código en el navegador -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-[#e5d3bd]">
+    
+    <div id="root"></div>
 
-  const handleRegister = async (e) => {
-    e.preventDefault();
-    setErrorMsg('');
-    const name = e.target.name.value;
-    const email = e.target.email.value;
-    const password = e.target.password.value;
+    <script type="text/babel">
+        const { useState, useEffect } = React;
 
-    setLoading(true);
-    const res = await apiCall('register', { name, email, password });
-    if (res.status === 'success') {
-      setUser(res.user);
-      setCurrentView('dashboard');
-      fetchData('user');
-    } else {
-      setErrorMsg(res.message);
-      setLoading(false);
-    }
-  };
+        // --- ICONOS SVG ---
+        const Play = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>;
+        const BookOpen = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
+        const Users = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+        const LogOut = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
+        const ChevronRight = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>;
+        const UserCircle = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>;
+        const Activity = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
+        const Lock = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
+        const Mail = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>;
+        const Calendar = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
+        const VideoIcon = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>;
 
-  const fetchData = async (role) => {
-    if (!GOOGLE_SCRIPT_URL) {
-      loadMockData();
-      return;
-    }
-    const resVideos = await apiCall('getVideos', {});
-    if (resVideos.status === 'success') setVideos(resVideos.data);
+        // --- CONFIGURACIÓN ---
+        // Tu URL de Google Apps Script ya está integrada aquí:
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx1q7_Mxg8fdtxlz-_whq6bGc8QbqJwTaaEkgyrGgMbnwPe8sHfNkShZgUQnTKWUT99/exec"; 
 
-    const resBlog = await apiCall('getBlog', {});
-    if (resBlog.status === 'success') setBlogPosts(resBlog.data);
+        // --- CONTRASEÑA DE SEGURIDAD (Debe ser idéntica en Apps Script) ---
+        const API_SECRET = "ElementsBox_Seguridad_2026";
 
-    if (role === 'admin') {
-      const resUsers = await apiCall('getUsers', { role: 'admin' });
-      if (resUsers.status === 'success') setUsersList(resUsers.data);
-    }
-  };
+        // --- COLORES ---
+        const colors = {
+            bg: 'bg-[#e5d3bd]', 
+            surface: 'bg-[#f0e3d1]', 
+            textDark: 'text-[#2a241f]', 
+            accent: 'bg-[#2a241f]', 
+            accentHover: 'hover:bg-[#403831]',
+        };
 
-  // Helper para extraer ID de Youtube
-  const getYoutubeId = (url) => {
-    if (!url) return '';
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-  };
+        function ElementsBoxApp() {
+            const [user, setUser] = useState(null); 
+            const [currentView, setCurrentView] = useState('login'); 
+            const [loading, setLoading] = useState(false);
+            const [errorMsg, setErrorMsg] = useState('');
 
-  // --- COMPONENTES UI ---
+            const [videos, setVideos] = useState([]);
+            const [blogPosts, setBlogPosts] = useState([]);
+            const [usersList, setUsersList] = useState([]);
 
-  const Topbar = () => (
-    <div className={`${colors.accent} text-[#e5d3bd] p-4 flex justify-between items-center shadow-lg rounded-b-xl mb-6`}>
-      <div className="flex items-center gap-3 font-bold text-xl tracking-widest uppercase">
-        <Activity className="w-8 h-8" />
-        ELEMENTS BOX
-      </div>
-      {user && (
-        <button onClick={() => { setUser(null); setCurrentView('login'); }} className="flex items-center gap-2 hover:text-white transition-colors">
-          <LogOut className="w-5 h-5" />
-          <span className="hidden sm:inline">Salir</span>
-        </button>
-      )}
-    </div>
-  );
+            const apiCall = async (action, payload) => {
+                try {
+                    setLoading(true);
+                    const response = await fetch(GOOGLE_SCRIPT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain' }, 
+                        body: JSON.stringify({ action, payload, apiSecret: API_SECRET })
+                    });
+                    const data = await response.json();
+                    setLoading(false);
+                    return data;
+                } catch (error) {
+                    setLoading(false);
+                    console.error("Error en API:", error);
+                    return { status: 'error', message: 'Error de conexión con el servidor de Google.' };
+                }
+            };
 
-  const NavMenu = () => (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-      <button onClick={() => setCurrentView('dashboard')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'dashboard' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
-        <UserCircle className="w-6 h-6" /> Perfil
-      </button>
-      <button onClick={() => setCurrentView('academy')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'academy' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
-        <Video className="w-6 h-6" /> Academia
-      </button>
-      <button onClick={() => setCurrentView('blog')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'blog' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
-        <BookOpen className="w-6 h-6" /> Blog
-      </button>
-      {user?.role === 'admin' && (
-        <button onClick={() => setCurrentView('admin')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'admin' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
-          <Users className="w-6 h-6" /> Admin
-        </button>
-      )}
-    </div>
-  );
-
-  return (
-    <div className={`min-h-screen ${colors.bg} font-sans`}>
-      <div className="max-w-4xl mx-auto px-4 pb-12">
-        {(user || currentView !== 'login') && <Topbar />}
-
-        {/* VISTAS DE AUTENTICACIÓN */}
-        {!user && currentView === 'login' && (
-          <div className="min-h-[80vh] flex flex-col items-center justify-center">
-             <div className="mb-8 flex flex-col items-center text-center">
-                <div className={`w-24 h-24 rounded-full ${colors.accent} flex items-center justify-center shadow-xl mb-4 border-4 border-[#f0e3d1]`}>
-                    <Activity className="w-12 h-12 text-[#e5d3bd]" />
-                </div>
-                <h1 className={`${colors.textDark} text-4xl font-black uppercase tracking-widest`}>Elements</h1>
-                <h2 className={`${colors.textDark} text-2xl font-light tracking-[0.3em]`}>BOX</h2>
-             </div>
-             
-             <div className={`${colors.surface} p-8 rounded-2xl shadow-xl w-full max-w-md border border-[#2a241f]/10`}>
-                <h3 className={`text-2xl font-bold ${colors.textDark} mb-6 text-center`}>Iniciar Sesión</h3>
-                {errorMsg && <div className="bg-red-100 text-red-800 p-3 rounded-lg mb-4 text-sm text-center">{errorMsg}</div>}
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                setErrorMsg('');
+                const email = e.target.email.value;
+                const password = e.target.password.value;
                 
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div>
-                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}><Mail className="inline w-4 h-4 mr-1"/>Correo Electrónico</label>
-                    <input type="email" name="email" required className="w-full p-3 rounded-lg border-2 border-transparent focus:border-[#2a241f] bg-white outline-none transition-all" placeholder="tu@correo.com" />
-                  </div>
-                  <div>
-                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}><Lock className="inline w-4 h-4 mr-1"/>Contraseña</label>
-                    <input type="password" name="password" required className="w-full p-3 rounded-lg border-2 border-transparent focus:border-[#2a241f] bg-white outline-none transition-all" placeholder="••••••••" />
-                  </div>
-                  <button type="submit" disabled={loading} className={`w-full ${colors.accent} text-[#e5d3bd] p-3 rounded-lg font-bold text-lg mt-2 ${colors.accentHover} transition-colors shadow-md flex justify-center items-center`}>
-                    {loading ? 'Cargando...' : 'Entrar al Box'} <ChevronRight className="w-5 h-5 ml-1"/>
-                  </button>
-                </form>
+                setLoading(true);
+                const res = await apiCall('login', { email, password });
+                if (res.status === 'success') {
+                    setUser(res.user);
+                    setCurrentView('dashboard');
+                    fetchData(res.user.role);
+                } else {
+                    setErrorMsg(res.message);
+                    setLoading(false);
+                }
+            };
 
-                <p className={`mt-6 text-center text-sm ${colors.textDark}`}>
-                  ¿Eres nuevo atleta? <button onClick={() => setCurrentView('register')} className="font-bold underline">Regístrate aquí</button>
-                </p>
+            const handleRegister = async (e) => {
+                e.preventDefault();
+                setErrorMsg('');
+                const name = e.target.name.value;
+                const email = e.target.email.value;
+                const password = e.target.password.value;
 
-                {!GOOGLE_SCRIPT_URL && (
-                  <div className="mt-8 p-3 bg-yellow-100/50 border border-yellow-600/30 rounded-lg text-xs text-yellow-800 text-center">
-                    Modo Demo activo. Usa <b>admin@elements.com</b> para ver la vista de Administrador, o cualquier otro para vista de Atleta.
-                  </div>
-                )}
-             </div>
-          </div>
-        )}
+                setLoading(true);
+                const res = await apiCall('register', { name, email, password });
+                if (res.status === 'success') {
+                    setUser(res.user);
+                    setCurrentView('dashboard');
+                    fetchData('user');
+                } else {
+                    setErrorMsg(res.message);
+                    setLoading(false);
+                }
+            };
 
-        {!user && currentView === 'register' && (
-          <div className="min-h-[80vh] flex flex-col items-center justify-center">
-             <div className={`${colors.surface} p-8 rounded-2xl shadow-xl w-full max-w-md border border-[#2a241f]/10`}>
-                <h3 className={`text-2xl font-bold ${colors.textDark} mb-6 text-center`}>Nuevo Atleta</h3>
-                {errorMsg && <div className="bg-red-100 text-red-800 p-3 rounded-lg mb-4 text-sm text-center">{errorMsg}</div>}
-                
-                <form onSubmit={handleRegister} className="space-y-4">
-                  <div>
-                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Nombre Completo</label>
-                    <input type="text" name="name" required className="w-full p-3 rounded-lg bg-white outline-none" placeholder="Juan Pérez" />
-                  </div>
-                  <div>
-                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Correo Electrónico</label>
-                    <input type="email" name="email" required className="w-full p-3 rounded-lg bg-white outline-none" placeholder="tu@correo.com" />
-                  </div>
-                  <div>
-                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Contraseña</label>
-                    <input type="password" name="password" required className="w-full p-3 rounded-lg bg-white outline-none" placeholder="••••••••" />
-                  </div>
-                  <button type="submit" disabled={loading} className={`w-full ${colors.accent} text-[#e5d3bd] p-3 rounded-lg font-bold text-lg mt-2 ${colors.accentHover} transition-colors shadow-md`}>
-                    {loading ? 'Creando...' : 'Crear Cuenta'}
-                  </button>
-                </form>
-                <p className={`mt-6 text-center text-sm ${colors.textDark}`}>
-                  ¿Ya tienes cuenta? <button onClick={() => setCurrentView('login')} className="font-bold underline">Inicia Sesión</button>
-                </p>
-             </div>
-          </div>
-        )}
+            const fetchData = async (role) => {
+                const resVideos = await apiCall('getVideos', {});
+                if (resVideos.status === 'success') setVideos(resVideos.data);
 
-        {/* APLICACIÓN PRINCIPAL */}
-        {user && (
-          <>
-            <NavMenu />
+                const resBlog = await apiCall('getBlog', {});
+                if (resBlog.status === 'success') setBlogPosts(resBlog.data);
 
-            {/* DASHBOARD (PERFIL) */}
-            {currentView === 'dashboard' && (
-              <div className={`${colors.surface} p-6 md:p-8 rounded-2xl shadow-lg border border-[#2a241f]/10`}>
-                <h2 className={`text-3xl font-black ${colors.textDark} mb-2 uppercase`}>¡Hola, {user.name}!</h2>
-                <p className={`${colors.textDark}/80 mb-8`}>Bienvenido a Elements Box.</p>
-                
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <h3 className={`font-bold ${colors.textDark} text-lg mb-4 flex items-center border-b pb-2`}><UserCircle className="mr-2"/> Datos de Cuenta</h3>
-                    <p className="mb-2"><span className="text-gray-500 text-sm">Rol:</span> <strong className="uppercase">{user.role}</strong></p>
-                    <p className="mb-2"><span className="text-gray-500 text-sm">Correo:</span> <strong>{user.email}</strong></p>
-                    {user.role === 'user' && (
-                      <>
-                        <p className="mb-2"><span className="text-gray-500 text-sm">Plan actual:</span> <span className="bg-[#2a241f] text-[#e5d3bd] px-2 py-1 rounded text-xs font-bold uppercase">{user.plan || 'Básico'}</span></p>
-                        <p className="mb-2"><span className="text-gray-500 text-sm">Estado:</span> <span className="text-green-600 font-bold">{user.status || 'Activo'}</span></p>
-                      </>
+                if (role === 'admin') {
+                    const resUsers = await apiCall('getUsers', { role: 'admin' });
+                    if (resUsers.status === 'success') setUsersList(resUsers.data);
+                }
+            };
+
+            const getYoutubeId = (url) => {
+                if (!url) return '';
+                const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+                const match = url.match(regExp);
+                return (match && match[2].length === 11) ? match[2] : null;
+            };
+
+            const Topbar = () => (
+                <div className={`${colors.accent} text-[#e5d3bd] p-4 flex justify-between items-center shadow-lg rounded-b-xl mb-6`}>
+                    <div className="flex items-center gap-3 font-bold text-xl tracking-widest uppercase">
+                        <Activity className="w-8 h-8" />
+                        ELEMENTS BOX
+                    </div>
+                    {user && (
+                        <button onClick={() => { setUser(null); setCurrentView('login'); }} className="flex items-center gap-2 hover:text-white transition-colors">
+                            <LogOut className="w-5 h-5" />
+                            <span className="hidden sm:inline">Salir</span>
+                        </button>
                     )}
-                  </div>
-
-                  <div className={`${colors.accent} text-[#e5d3bd] p-6 rounded-xl shadow-sm flex flex-col justify-center items-center text-center`}>
-                    <Activity className="w-16 h-16 mb-4 opacity-50" />
-                    <h3 className="font-bold text-xl mb-2">WOD del Día</h3>
-                    <p className="text-sm opacity-80">Revisa la sección de Blog para enterarte de las novedades o ve a la Academia para mejorar tu técnica.</p>
-                  </div>
                 </div>
-              </div>
-            )}
+            );
 
-            {/* ACADEMIA (VIDEOS YOUTUBE) */}
-            {currentView === 'academy' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><Play className="mr-3 w-8 h-8"/> Academia Elements</h2>
+            const NavMenu = () => (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    <button onClick={() => setCurrentView('dashboard')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'dashboard' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
+                        <UserCircle className="w-6 h-6" /> Perfil
+                    </button>
+                    <button onClick={() => setCurrentView('academy')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'academy' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
+                        <VideoIcon className="w-6 h-6" /> Academia
+                    </button>
+                    <button onClick={() => setCurrentView('blog')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'blog' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
+                        <BookOpen className="w-6 h-6" /> Blog
+                    </button>
+                    {user?.role === 'admin' && (
+                        <button onClick={() => setCurrentView('admin')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'admin' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
+                            <Users className="w-6 h-6" /> Admin
+                        </button>
+                    )}
                 </div>
-                
-                {videos.length === 0 ? (
-                   <p className="text-center py-10 opacity-60">Aún no hay videos subidos.</p>
-                ) : (
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {videos.map((vid, idx) => {
-                      const ytId = getYoutubeId(vid.URL || '');
-                      return (
-                        <div key={idx} className={`${colors.surface} rounded-xl overflow-hidden shadow-lg border border-[#2a241f]/10 flex flex-col`}>
-                          {ytId ? (
-                            <div className="relative w-full pt-[56.25%] bg-black">
-                              <iframe 
-                                className="absolute top-0 left-0 w-full h-full"
-                                src={`https://www.youtube.com/embed/${ytId}`} 
-                                title={vid.Nombre}
-                                frameBorder="0" 
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                allowFullScreen
-                              ></iframe>
+            );
+
+            return (
+                <div className={`min-h-screen ${colors.bg} font-sans`}>
+                    <div className="max-w-4xl mx-auto px-4 pb-12">
+                        {(user || currentView !== 'login') && <Topbar />}
+
+                        {!user && currentView === 'login' && (
+                            <div className="min-h-[80vh] flex flex-col items-center justify-center pt-8">
+                                <div className="mb-8 flex flex-col items-center text-center">
+                                    <div className={`w-24 h-24 rounded-full ${colors.accent} flex items-center justify-center shadow-xl mb-4 border-4 border-[#f0e3d1]`}>
+                                        <Activity className="w-12 h-12 text-[#e5d3bd]" />
+                                    </div>
+                                    <h1 className={`${colors.textDark} text-4xl font-black uppercase tracking-widest`}>Elements</h1>
+                                    <h2 className={`${colors.textDark} text-2xl font-light tracking-[0.3em]`}>BOX</h2>
+                                </div>
+                                
+                                <div className={`${colors.surface} p-8 rounded-2xl shadow-xl w-full max-w-md border border-[#2a241f]/10`}>
+                                    <h3 className={`text-2xl font-bold ${colors.textDark} mb-6 text-center`}>Iniciar Sesión</h3>
+                                    {errorMsg && <div className="bg-red-100 text-red-800 p-3 rounded-lg mb-4 text-sm text-center font-semibold">{errorMsg}</div>}
+                                    
+                                    <form onSubmit={handleLogin} className="space-y-4">
+                                        <div>
+                                            <label className={`block text-sm font-semibold ${colors.textDark} mb-1 flex items-center`}><Mail className="w-4 h-4 mr-1"/>Correo Electrónico</label>
+                                            <input type="email" name="email" required className="w-full p-3 rounded-lg border-2 border-transparent focus:border-[#2a241f] bg-white outline-none transition-all" placeholder="tu@correo.com" />
+                                        </div>
+                                        <div>
+                                            <label className={`block text-sm font-semibold ${colors.textDark} mb-1 flex items-center`}><Lock className="w-4 h-4 mr-1"/>Contraseña</label>
+                                            <input type="password" name="password" required className="w-full p-3 rounded-lg border-2 border-transparent focus:border-[#2a241f] bg-white outline-none transition-all" placeholder="••••••••" />
+                                        </div>
+                                        <button type="submit" disabled={loading} className={`w-full ${colors.accent} text-[#e5d3bd] p-3 rounded-lg font-bold text-lg mt-2 ${colors.accentHover} transition-colors shadow-md flex justify-center items-center`}>
+                                            {loading ? 'Cargando...' : 'Entrar al Box'} <ChevronRight className="w-5 h-5 ml-1"/>
+                                        </button>
+                                    </form>
+
+                                    <p className={`mt-6 text-center text-sm ${colors.textDark}`}>
+                                        ¿Eres nuevo atleta? <button onClick={() => setCurrentView('register')} className="font-bold underline">Regístrate aquí</button>
+                                    </p>
+                                </div>
                             </div>
-                          ) : (
-                            <div className="w-full h-48 bg-gray-300 flex items-center justify-center text-gray-500">Video no válido</div>
-                          )}
-                          <div className="p-5 flex-1 flex flex-col">
-                            <span className="text-xs font-bold text-[#2a241f]/60 uppercase tracking-wider mb-1">{vid.Categoria}</span>
-                            <h3 className={`text-xl font-bold ${colors.textDark} mb-2`}>{vid.Nombre}</h3>
-                            <p className="text-sm text-gray-700 mt-auto">{vid.Descripcion}</p>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* BLOG (NOTICIAS / EVENTOS) */}
-            {currentView === 'blog' && (
-              <div className="space-y-6">
-                <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><BookOpen className="mr-3 w-8 h-8"/> Novedades</h2>
-                
-                {blogPosts.length === 0 ? (
-                   <p className="text-center py-10 opacity-60">Aún no hay publicaciones.</p>
-                ) : (
-                  <div className="grid md:grid-cols-2 gap-8">
-                    {blogPosts.map((post, idx) => (
-                      <div key={idx} className={`bg-white rounded-2xl overflow-hidden shadow-xl border border-transparent hover:border-[#2a241f]/30 transition-all group`}>
-                        {post.URL_Imagen && (
-                          <div className="h-56 overflow-hidden">
-                            <img src={post.URL_Imagen} alt={post.Titulo} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                          </div>
                         )}
-                        <div className="p-6">
-                          <div className="flex items-center text-xs font-bold text-[#2a241f]/50 mb-3">
-                            <Calendar className="w-4 h-4 mr-1"/> {post.Fecha || 'Reciente'}
-                          </div>
-                          <h3 className={`text-2xl font-black ${colors.textDark} mb-3 leading-tight`}>{post.Titulo}</h3>
-                          <p className="text-gray-600 leading-relaxed">{post.Descripcion}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
 
-            {/* PANEL DE ADMINISTRADOR */}
-            {currentView === 'admin' && user?.role === 'admin' && (
-              <div className="space-y-6">
-                <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><Users className="mr-3 w-8 h-8"/> Gestión de Atletas</h2>
-                
-                <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-[#2a241f]/10">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className={`${colors.accent} text-[#e5d3bd] uppercase text-sm`}>
-                          <th className="p-4 font-semibold">Nombre</th>
-                          <th className="p-4 font-semibold">Correo</th>
-                          <th className="p-4 font-semibold">Plan</th>
-                          <th className="p-4 font-semibold">Estado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {usersList.length === 0 ? (
-                          <tr><td colSpan="4" className="p-4 text-center text-gray-500">No hay atletas registrados aún.</td></tr>
-                        ) : (
-                          usersList.map((u, idx) => (
-                            <tr key={idx} className="border-b hover:bg-[#f0e3d1]/50 transition-colors">
-                              <td className="p-4 font-bold ${colors.textDark}">{u.Nombre}</td>
-                              <td className="p-4 text-gray-600">{u.Correo}</td>
-                              <td className="p-4"><span className="bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded font-bold">{u.Plan || 'N/A'}</span></td>
-                              <td className="p-4">
-                                <span className={`text-xs px-2 py-1 rounded font-bold ${u.Estado === 'Activo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                  {u.Estado || 'N/A'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
+                        {!user && currentView === 'register' && (
+                            <div className="min-h-[80vh] flex flex-col items-center justify-center pt-8">
+                                <div className={`${colors.surface} p-8 rounded-2xl shadow-xl w-full max-w-md border border-[#2a241f]/10`}>
+                                    <h3 className={`text-2xl font-bold ${colors.textDark} mb-6 text-center`}>Nuevo Atleta</h3>
+                                    {errorMsg && <div className="bg-red-100 text-red-800 p-3 rounded-lg mb-4 text-sm text-center font-semibold">{errorMsg}</div>}
+                                    
+                                    <form onSubmit={handleRegister} className="space-y-4">
+                                        <div>
+                                            <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Nombre Completo</label>
+                                            <input type="text" name="name" required className="w-full p-3 rounded-lg bg-white outline-none border-2 border-transparent focus:border-[#2a241f]" placeholder="Juan Pérez" />
+                                        </div>
+                                        <div>
+                                            <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Correo Electrónico</label>
+                                            <input type="email" name="email" required className="w-full p-3 rounded-lg bg-white outline-none border-2 border-transparent focus:border-[#2a241f]" placeholder="tu@correo.com" />
+                                        </div>
+                                        <div>
+                                            <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Contraseña</label>
+                                            <input type="password" name="password" required className="w-full p-3 rounded-lg bg-white outline-none border-2 border-transparent focus:border-[#2a241f]" placeholder="••••••••" />
+                                        </div>
+                                        <button type="submit" disabled={loading} className={`w-full ${colors.accent} text-[#e5d3bd] p-3 rounded-lg font-bold text-lg mt-2 ${colors.accentHover} transition-colors shadow-md`}>
+                                            {loading ? 'Creando...' : 'Crear Cuenta'}
+                                        </button>
+                                    </form>
+                                    <p className={`mt-6 text-center text-sm ${colors.textDark}`}>
+                                        ¿Ya tienes cuenta? <button onClick={() => setCurrentView('login')} className="font-bold underline">Inicia Sesión</button>
+                                    </p>
+                                </div>
+                            </div>
                         )}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="p-4 bg-gray-50 text-xs text-gray-500 border-t">
-                    <p>Nota: Para editar planes, eliminar usuarios o agregar videos y blog, debes hacerlo directamente en la <b>Hoja de Google Sheets</b>. Los cambios se reflejarán aquí automáticamente.</p>
-                  </div>
+
+                        {user && (
+                            <>
+                                <NavMenu />
+
+                                {/* DASHBOARD */}
+                                {currentView === 'dashboard' && (
+                                    <div className={`${colors.surface} p-6 md:p-8 rounded-2xl shadow-lg border border-[#2a241f]/10`}>
+                                        <h2 className={`text-3xl font-black ${colors.textDark} mb-2 uppercase`}>¡Hola, {user.name}!</h2>
+                                        <p className={`${colors.textDark}/80 mb-8`}>Bienvenido a Elements Box.</p>
+                                        
+                                        <div className="grid md:grid-cols-2 gap-6">
+                                            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                                                <h3 className={`font-bold ${colors.textDark} text-lg mb-4 flex items-center border-b pb-2`}><UserCircle className="w-5 h-5 mr-2"/> Datos de Cuenta</h3>
+                                                <p className="mb-2"><span className="text-gray-500 text-sm">Rol:</span> <strong className="uppercase">{user.role}</strong></p>
+                                                <p className="mb-2"><span className="text-gray-500 text-sm">Correo:</span> <strong>{user.email}</strong></p>
+                                                {user.role === 'user' && (
+                                                    <>
+                                                        <p className="mb-2"><span className="text-gray-500 text-sm">Plan actual:</span> <span className="bg-[#2a241f] text-[#e5d3bd] px-2 py-1 rounded text-xs font-bold uppercase">{user.plan || 'Básico'}</span></p>
+                                                        <p className="mb-2"><span className="text-gray-500 text-sm">Estado:</span> <span className="text-green-600 font-bold">{user.status || 'Activo'}</span></p>
+                                                    </>
+                                                )}
+                                            </div>
+
+                                            <div className={`${colors.accent} text-[#e5d3bd] p-6 rounded-xl shadow-sm flex flex-col justify-center items-center text-center`}>
+                                                <Activity className="w-16 h-16 mb-4 opacity-50" />
+                                                <h3 className="font-bold text-xl mb-2">Constancia y Disciplina</h3>
+                                                <p className="text-sm opacity-80">Revisa la sección de Blog para enterarte de las novedades o ve a la Academia para mejorar tu técnica.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ACADEMIA */}
+                                {currentView === 'academy' && (
+                                    <div className="space-y-6">
+                                        <div className="flex items-center justify-between">
+                                            <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><Play className="mr-3 w-8 h-8"/> Academia Elements</h2>
+                                        </div>
+                                        
+                                        {videos.length === 0 ? (
+                                            <p className="text-center py-10 opacity-60">Aún no hay videos subidos en la hoja de Google Sheets.</p>
+                                        ) : (
+                                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                                {videos.map((vid, idx) => {
+                                                    const ytId = getYoutubeId(vid.URL || '');
+                                                    return (
+                                                        <div key={idx} className={`${colors.surface} rounded-xl overflow-hidden shadow-lg border border-[#2a241f]/10 flex flex-col`}>
+                                                            {ytId ? (
+                                                                <div className="relative w-full pt-[56.25%] bg-black">
+                                                                    <iframe 
+                                                                        className="absolute top-0 left-0 w-full h-full"
+                                                                        src={`https://www.youtube.com/embed/${ytId}`} 
+                                                                        title={vid.Nombre}
+                                                                        frameBorder="0" 
+                                                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                                                        allowFullScreen
+                                                                    ></iframe>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="w-full h-48 bg-gray-300 flex items-center justify-center text-gray-500">Video no válido</div>
+                                                            )}
+                                                            <div className="p-5 flex-1 flex flex-col">
+                                                                <span className="text-xs font-bold text-[#2a241f]/60 uppercase tracking-wider mb-1">{vid.Categoria}</span>
+                                                                <h3 className={`text-xl font-bold ${colors.textDark} mb-2`}>{vid.Nombre}</h3>
+                                                                <p className="text-sm text-gray-700 mt-auto">{vid.Descripcion}</p>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* BLOG */}
+                                {currentView === 'blog' && (
+                                    <div className="space-y-6">
+                                        <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><BookOpen className="mr-3 w-8 h-8"/> Novedades</h2>
+                                        
+                                        {blogPosts.length === 0 ? (
+                                            <p className="text-center py-10 opacity-60">Aún no hay publicaciones en la hoja de Google Sheets.</p>
+                                        ) : (
+                                            <div className="grid md:grid-cols-2 gap-8">
+                                                {blogPosts.map((post, idx) => (
+                                                    <div key={idx} className={`bg-white rounded-2xl overflow-hidden shadow-xl border border-transparent hover:border-[#2a241f]/30 transition-all group`}>
+                                                        {post.URL_Imagen && (
+                                                            <div className="h-56 overflow-hidden">
+                                                                <img src={post.URL_Imagen} alt={post.Titulo} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                                            </div>
+                                                        )}
+                                                        <div className="p-6">
+                                                            <div className="flex items-center text-xs font-bold text-[#2a241f]/50 mb-3">
+                                                                <Calendar className="w-4 h-4 mr-1"/> {post.Fecha || 'Reciente'}
+                                                            </div>
+                                                            <h3 className={`text-2xl font-black ${colors.textDark} mb-3 leading-tight`}>{post.Titulo}</h3>
+                                                            <p className="text-gray-600 leading-relaxed">{post.Descripcion}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* ADMIN */}
+                                {currentView === 'admin' && user?.role === 'admin' && (
+                                    <div className="space-y-6">
+                                        <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><Users className="mr-3 w-8 h-8"/> Gestión de Atletas</h2>
+                                        
+                                        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-[#2a241f]/10">
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-left border-collapse">
+                                                    <thead>
+                                                        <tr className={`${colors.accent} text-[#e5d3bd] uppercase text-sm`}>
+                                                            <th className="p-4 font-semibold">Nombre</th>
+                                                            <th className="p-4 font-semibold">Correo</th>
+                                                            <th className="p-4 font-semibold">Plan</th>
+                                                            <th className="p-4 font-semibold">Estado</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {usersList.length === 0 ? (
+                                                            <tr><td colSpan="4" className="p-4 text-center text-gray-500">No hay atletas registrados aún.</td></tr>
+                                                        ) : (
+                                                            usersList.map((u, idx) => (
+                                                                <tr key={idx} className="border-b hover:bg-[#f0e3d1]/50 transition-colors">
+                                                                    <td className="p-4 font-bold text-[#2a241f]">{u.Nombre}</td>
+                                                                    <td className="p-4 text-gray-600">{u.Correo}</td>
+                                                                    <td className="p-4"><span className="bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded font-bold">{u.Plan || 'N/A'}</span></td>
+                                                                    <td className="p-4">
+                                                                        <span className={`text-xs px-2 py-1 rounded font-bold ${u.Estado === 'Activo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                                            {u.Estado || 'N/A'}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            ))
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div className="p-4 bg-gray-50 text-xs text-gray-500 border-t">
+                                                <p>Nota: Para editar planes, eliminar usuarios o agregar videos y blog, hazlo directamente en tu <b>Hoja de Google Sheets</b>. Los cambios se reflejarán aquí automáticamente cuando el usuario inicie sesión o recargue la página.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
                 </div>
-              </div>
-            )}
+            );
+        }
 
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
+        // Renderizar la aplicación en el div con id "root"
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ElementsBoxApp />);
+    </script>
+</body>
+</html>
