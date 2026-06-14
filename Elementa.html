@@ -1,0 +1,411 @@
+import React, { useState, useEffect } from 'react';
+import { Play, BookOpen, Users, LogOut, ChevronRight, UserCircle, Activity, Lock, Mail, Calendar, Video } from 'lucide-react';
+
+// --- CONFIGURACIÓN ---
+// Reemplaza esta URL con la que te dé Google Apps Script al implementar
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx1q7_Mxg8fdtxlz-_whq6bGc8QbqJwTaaEkgyrGgMbnwPe8sHfNkShZgUQnTKWUT99/exec"; 
+
+// --- COLORES BASADOS EN EL LOGO ---
+const colors = {
+  bg: 'bg-[#e5d3bd]', // Beige fondo
+  surface: 'bg-[#f0e3d1]', // Beige claro para tarjetas
+  textDark: 'text-[#2a241f]', // Marrón/Negro del texto y logo
+  accent: 'bg-[#2a241f]', // Fondo oscuro para botones
+  accentHover: 'hover:bg-[#403831]',
+};
+
+export default function ElementsBoxApp() {
+  const [user, setUser] = useState(null); // null, { name, role: 'admin'|'user' }
+  const [currentView, setCurrentView] = useState('login'); // login, register, dashboard, academy, blog, admin
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Estados de datos
+  const [videos, setVideos] = useState([]);
+  const [blogPosts, setBlogPosts] = useState([]);
+  const [usersList, setUsersList] = useState([]);
+
+  // Mock Data para mostrar si no hay URL conectada
+  const loadMockData = () => {
+    setVideos([
+      { Categoria: 'Gimnásticos', Nombre: 'Pull Ups estrictas', Descripcion: 'Aprende la técnica correcta paso a paso.', URL: 'https://www.youtube.com/watch?v=1' },
+      { Categoria: 'Halterofilia', Nombre: 'Clean & Jerk', Descripcion: 'Conceptos básicos para levantar seguro.', URL: 'https://www.youtube.com/watch?v=2' },
+      { Categoria: 'Metcon', Nombre: 'Burpees eficientes', Descripcion: 'Ahorra energía en tus WODs.', URL: 'https://www.youtube.com/watch?v=3' }
+    ]);
+    setBlogPosts([
+      { Titulo: 'Competencia Interna 2026', Descripcion: 'Inscríbete a nuestra competencia de aniversario este mes.', URL_Imagen: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&q=80&w=1000', Fecha: '15/06/2026' },
+      { Titulo: 'Nuevos Horarios de Open Box', Descripcion: 'Hemos ampliado los horarios para que no te pierdas ningún entreno.', URL_Imagen: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=1000', Fecha: '10/06/2026' }
+    ]);
+    setUsersList([
+      { Nombre: 'Juan Pérez', Correo: 'juan@test.com', Plan: 'Ilimitado', Estado: 'Activo' },
+      { Nombre: 'Ana Gómez', Correo: 'ana@test.com', Plan: '3 Días', Estado: 'Inactivo' }
+    ]);
+  };
+
+  // Función principal para comunicarse con Google Apps Script
+  const apiCall = async (action, payload) => {
+    if (!GOOGLE_SCRIPT_URL) {
+      console.warn("No hay URL de Google Script conectada. Usando simulador.");
+      return simulateApi(action, payload);
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' }, // Importante para evitar error de CORS en preflight
+        body: JSON.stringify({ action, payload })
+      });
+      const data = await response.json();
+      setLoading(false);
+      return data;
+    } catch (error) {
+      setLoading(false);
+      console.error("Error en API:", error);
+      return { status: 'error', message: 'Error de conexión con el servidor.' };
+    }
+  };
+
+  // Simulador local por si el usuario aún no conecta el Backend
+  const simulateApi = (action, payload) => {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        if (action === 'login') {
+          if (payload.email === 'admin@elements.com') resolve({ status: 'success', user: { name: 'Admin Elements', role: 'admin' }});
+          else resolve({ status: 'success', user: { name: 'Atleta Prueba', role: 'user', plan: 'Ilimitado', status: 'Activo' }});
+        } else if (action === 'register') {
+          resolve({ status: 'success', user: { name: payload.name, role: 'user', plan: 'Básico', status: 'Activo' }});
+        }
+      }, 1000);
+    });
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    const email = e.target.email.value;
+    const password = e.target.password.value;
+    
+    setLoading(true);
+    const res = await apiCall('login', { email, password });
+    if (res.status === 'success') {
+      setUser(res.user);
+      setCurrentView('dashboard');
+      fetchData(res.user.role);
+    } else {
+      setErrorMsg(res.message);
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    const name = e.target.name.value;
+    const email = e.target.email.value;
+    const password = e.target.password.value;
+
+    setLoading(true);
+    const res = await apiCall('register', { name, email, password });
+    if (res.status === 'success') {
+      setUser(res.user);
+      setCurrentView('dashboard');
+      fetchData('user');
+    } else {
+      setErrorMsg(res.message);
+      setLoading(false);
+    }
+  };
+
+  const fetchData = async (role) => {
+    if (!GOOGLE_SCRIPT_URL) {
+      loadMockData();
+      return;
+    }
+    const resVideos = await apiCall('getVideos', {});
+    if (resVideos.status === 'success') setVideos(resVideos.data);
+
+    const resBlog = await apiCall('getBlog', {});
+    if (resBlog.status === 'success') setBlogPosts(resBlog.data);
+
+    if (role === 'admin') {
+      const resUsers = await apiCall('getUsers', { role: 'admin' });
+      if (resUsers.status === 'success') setUsersList(resUsers.data);
+    }
+  };
+
+  // Helper para extraer ID de Youtube
+  const getYoutubeId = (url) => {
+    if (!url) return '';
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  // --- COMPONENTES UI ---
+
+  const Topbar = () => (
+    <div className={`${colors.accent} text-[#e5d3bd] p-4 flex justify-between items-center shadow-lg rounded-b-xl mb-6`}>
+      <div className="flex items-center gap-3 font-bold text-xl tracking-widest uppercase">
+        <Activity className="w-8 h-8" />
+        ELEMENTS BOX
+      </div>
+      {user && (
+        <button onClick={() => { setUser(null); setCurrentView('login'); }} className="flex items-center gap-2 hover:text-white transition-colors">
+          <LogOut className="w-5 h-5" />
+          <span className="hidden sm:inline">Salir</span>
+        </button>
+      )}
+    </div>
+  );
+
+  const NavMenu = () => (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <button onClick={() => setCurrentView('dashboard')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'dashboard' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
+        <UserCircle className="w-6 h-6" /> Perfil
+      </button>
+      <button onClick={() => setCurrentView('academy')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'academy' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
+        <Video className="w-6 h-6" /> Academia
+      </button>
+      <button onClick={() => setCurrentView('blog')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'blog' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
+        <BookOpen className="w-6 h-6" /> Blog
+      </button>
+      {user?.role === 'admin' && (
+        <button onClick={() => setCurrentView('admin')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'admin' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
+          <Users className="w-6 h-6" /> Admin
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <div className={`min-h-screen ${colors.bg} font-sans`}>
+      <div className="max-w-4xl mx-auto px-4 pb-12">
+        {(user || currentView !== 'login') && <Topbar />}
+
+        {/* VISTAS DE AUTENTICACIÓN */}
+        {!user && currentView === 'login' && (
+          <div className="min-h-[80vh] flex flex-col items-center justify-center">
+             <div className="mb-8 flex flex-col items-center text-center">
+                <div className={`w-24 h-24 rounded-full ${colors.accent} flex items-center justify-center shadow-xl mb-4 border-4 border-[#f0e3d1]`}>
+                    <Activity className="w-12 h-12 text-[#e5d3bd]" />
+                </div>
+                <h1 className={`${colors.textDark} text-4xl font-black uppercase tracking-widest`}>Elements</h1>
+                <h2 className={`${colors.textDark} text-2xl font-light tracking-[0.3em]`}>BOX</h2>
+             </div>
+             
+             <div className={`${colors.surface} p-8 rounded-2xl shadow-xl w-full max-w-md border border-[#2a241f]/10`}>
+                <h3 className={`text-2xl font-bold ${colors.textDark} mb-6 text-center`}>Iniciar Sesión</h3>
+                {errorMsg && <div className="bg-red-100 text-red-800 p-3 rounded-lg mb-4 text-sm text-center">{errorMsg}</div>}
+                
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div>
+                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}><Mail className="inline w-4 h-4 mr-1"/>Correo Electrónico</label>
+                    <input type="email" name="email" required className="w-full p-3 rounded-lg border-2 border-transparent focus:border-[#2a241f] bg-white outline-none transition-all" placeholder="tu@correo.com" />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}><Lock className="inline w-4 h-4 mr-1"/>Contraseña</label>
+                    <input type="password" name="password" required className="w-full p-3 rounded-lg border-2 border-transparent focus:border-[#2a241f] bg-white outline-none transition-all" placeholder="••••••••" />
+                  </div>
+                  <button type="submit" disabled={loading} className={`w-full ${colors.accent} text-[#e5d3bd] p-3 rounded-lg font-bold text-lg mt-2 ${colors.accentHover} transition-colors shadow-md flex justify-center items-center`}>
+                    {loading ? 'Cargando...' : 'Entrar al Box'} <ChevronRight className="w-5 h-5 ml-1"/>
+                  </button>
+                </form>
+
+                <p className={`mt-6 text-center text-sm ${colors.textDark}`}>
+                  ¿Eres nuevo atleta? <button onClick={() => setCurrentView('register')} className="font-bold underline">Regístrate aquí</button>
+                </p>
+
+                {!GOOGLE_SCRIPT_URL && (
+                  <div className="mt-8 p-3 bg-yellow-100/50 border border-yellow-600/30 rounded-lg text-xs text-yellow-800 text-center">
+                    Modo Demo activo. Usa <b>admin@elements.com</b> para ver la vista de Administrador, o cualquier otro para vista de Atleta.
+                  </div>
+                )}
+             </div>
+          </div>
+        )}
+
+        {!user && currentView === 'register' && (
+          <div className="min-h-[80vh] flex flex-col items-center justify-center">
+             <div className={`${colors.surface} p-8 rounded-2xl shadow-xl w-full max-w-md border border-[#2a241f]/10`}>
+                <h3 className={`text-2xl font-bold ${colors.textDark} mb-6 text-center`}>Nuevo Atleta</h3>
+                {errorMsg && <div className="bg-red-100 text-red-800 p-3 rounded-lg mb-4 text-sm text-center">{errorMsg}</div>}
+                
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div>
+                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Nombre Completo</label>
+                    <input type="text" name="name" required className="w-full p-3 rounded-lg bg-white outline-none" placeholder="Juan Pérez" />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Correo Electrónico</label>
+                    <input type="email" name="email" required className="w-full p-3 rounded-lg bg-white outline-none" placeholder="tu@correo.com" />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Contraseña</label>
+                    <input type="password" name="password" required className="w-full p-3 rounded-lg bg-white outline-none" placeholder="••••••••" />
+                  </div>
+                  <button type="submit" disabled={loading} className={`w-full ${colors.accent} text-[#e5d3bd] p-3 rounded-lg font-bold text-lg mt-2 ${colors.accentHover} transition-colors shadow-md`}>
+                    {loading ? 'Creando...' : 'Crear Cuenta'}
+                  </button>
+                </form>
+                <p className={`mt-6 text-center text-sm ${colors.textDark}`}>
+                  ¿Ya tienes cuenta? <button onClick={() => setCurrentView('login')} className="font-bold underline">Inicia Sesión</button>
+                </p>
+             </div>
+          </div>
+        )}
+
+        {/* APLICACIÓN PRINCIPAL */}
+        {user && (
+          <>
+            <NavMenu />
+
+            {/* DASHBOARD (PERFIL) */}
+            {currentView === 'dashboard' && (
+              <div className={`${colors.surface} p-6 md:p-8 rounded-2xl shadow-lg border border-[#2a241f]/10`}>
+                <h2 className={`text-3xl font-black ${colors.textDark} mb-2 uppercase`}>¡Hola, {user.name}!</h2>
+                <p className={`${colors.textDark}/80 mb-8`}>Bienvenido a Elements Box.</p>
+                
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <h3 className={`font-bold ${colors.textDark} text-lg mb-4 flex items-center border-b pb-2`}><UserCircle className="mr-2"/> Datos de Cuenta</h3>
+                    <p className="mb-2"><span className="text-gray-500 text-sm">Rol:</span> <strong className="uppercase">{user.role}</strong></p>
+                    <p className="mb-2"><span className="text-gray-500 text-sm">Correo:</span> <strong>{user.email}</strong></p>
+                    {user.role === 'user' && (
+                      <>
+                        <p className="mb-2"><span className="text-gray-500 text-sm">Plan actual:</span> <span className="bg-[#2a241f] text-[#e5d3bd] px-2 py-1 rounded text-xs font-bold uppercase">{user.plan || 'Básico'}</span></p>
+                        <p className="mb-2"><span className="text-gray-500 text-sm">Estado:</span> <span className="text-green-600 font-bold">{user.status || 'Activo'}</span></p>
+                      </>
+                    )}
+                  </div>
+
+                  <div className={`${colors.accent} text-[#e5d3bd] p-6 rounded-xl shadow-sm flex flex-col justify-center items-center text-center`}>
+                    <Activity className="w-16 h-16 mb-4 opacity-50" />
+                    <h3 className="font-bold text-xl mb-2">WOD del Día</h3>
+                    <p className="text-sm opacity-80">Revisa la sección de Blog para enterarte de las novedades o ve a la Academia para mejorar tu técnica.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ACADEMIA (VIDEOS YOUTUBE) */}
+            {currentView === 'academy' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><Play className="mr-3 w-8 h-8"/> Academia Elements</h2>
+                </div>
+                
+                {videos.length === 0 ? (
+                   <p className="text-center py-10 opacity-60">Aún no hay videos subidos.</p>
+                ) : (
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {videos.map((vid, idx) => {
+                      const ytId = getYoutubeId(vid.URL || '');
+                      return (
+                        <div key={idx} className={`${colors.surface} rounded-xl overflow-hidden shadow-lg border border-[#2a241f]/10 flex flex-col`}>
+                          {ytId ? (
+                            <div className="relative w-full pt-[56.25%] bg-black">
+                              <iframe 
+                                className="absolute top-0 left-0 w-full h-full"
+                                src={`https://www.youtube.com/embed/${ytId}`} 
+                                title={vid.Nombre}
+                                frameBorder="0" 
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                allowFullScreen
+                              ></iframe>
+                            </div>
+                          ) : (
+                            <div className="w-full h-48 bg-gray-300 flex items-center justify-center text-gray-500">Video no válido</div>
+                          )}
+                          <div className="p-5 flex-1 flex flex-col">
+                            <span className="text-xs font-bold text-[#2a241f]/60 uppercase tracking-wider mb-1">{vid.Categoria}</span>
+                            <h3 className={`text-xl font-bold ${colors.textDark} mb-2`}>{vid.Nombre}</h3>
+                            <p className="text-sm text-gray-700 mt-auto">{vid.Descripcion}</p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* BLOG (NOTICIAS / EVENTOS) */}
+            {currentView === 'blog' && (
+              <div className="space-y-6">
+                <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><BookOpen className="mr-3 w-8 h-8"/> Novedades</h2>
+                
+                {blogPosts.length === 0 ? (
+                   <p className="text-center py-10 opacity-60">Aún no hay publicaciones.</p>
+                ) : (
+                  <div className="grid md:grid-cols-2 gap-8">
+                    {blogPosts.map((post, idx) => (
+                      <div key={idx} className={`bg-white rounded-2xl overflow-hidden shadow-xl border border-transparent hover:border-[#2a241f]/30 transition-all group`}>
+                        {post.URL_Imagen && (
+                          <div className="h-56 overflow-hidden">
+                            <img src={post.URL_Imagen} alt={post.Titulo} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                          </div>
+                        )}
+                        <div className="p-6">
+                          <div className="flex items-center text-xs font-bold text-[#2a241f]/50 mb-3">
+                            <Calendar className="w-4 h-4 mr-1"/> {post.Fecha || 'Reciente'}
+                          </div>
+                          <h3 className={`text-2xl font-black ${colors.textDark} mb-3 leading-tight`}>{post.Titulo}</h3>
+                          <p className="text-gray-600 leading-relaxed">{post.Descripcion}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* PANEL DE ADMINISTRADOR */}
+            {currentView === 'admin' && user?.role === 'admin' && (
+              <div className="space-y-6">
+                <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><Users className="mr-3 w-8 h-8"/> Gestión de Atletas</h2>
+                
+                <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-[#2a241f]/10">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className={`${colors.accent} text-[#e5d3bd] uppercase text-sm`}>
+                          <th className="p-4 font-semibold">Nombre</th>
+                          <th className="p-4 font-semibold">Correo</th>
+                          <th className="p-4 font-semibold">Plan</th>
+                          <th className="p-4 font-semibold">Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {usersList.length === 0 ? (
+                          <tr><td colSpan="4" className="p-4 text-center text-gray-500">No hay atletas registrados aún.</td></tr>
+                        ) : (
+                          usersList.map((u, idx) => (
+                            <tr key={idx} className="border-b hover:bg-[#f0e3d1]/50 transition-colors">
+                              <td className="p-4 font-bold ${colors.textDark}">{u.Nombre}</td>
+                              <td className="p-4 text-gray-600">{u.Correo}</td>
+                              <td className="p-4"><span className="bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded font-bold">{u.Plan || 'N/A'}</span></td>
+                              <td className="p-4">
+                                <span className={`text-xs px-2 py-1 rounded font-bold ${u.Estado === 'Activo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                  {u.Estado || 'N/A'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="p-4 bg-gray-50 text-xs text-gray-500 border-t">
+                    <p>Nota: Para editar planes, eliminar usuarios o agregar videos y blog, debes hacerlo directamente en la <b>Hoja de Google Sheets</b>. Los cambios se reflejarán aquí automáticamente.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
