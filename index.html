@@ -1,411 +1,878 @@
-import React, { useState, useEffect } from 'react';
-import { Play, BookOpen, Users, LogOut, ChevronRight, UserCircle, Activity, Lock, Mail, Calendar, Video } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Play, BookOpen, Users, LogOut, UserCircle, Activity, 
+  Lock, Mail, Video, Search, ChevronDown, ChevronUp, X, 
+  Trophy, AlertCircle, Clock, Target, Image as ImageIcon 
+} from 'lucide-react';
 
-// --- CONFIGURACIÓN ---
-// Reemplaza esta URL con la que te dé Google Apps Script al implementar
+// --- CONFIGURACIÓN DE CONEXIÓN ---
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx1q7_Mxg8fdtxlz-_whq6bGc8QbqJwTaaEkgyrGgMbnwPe8sHfNkShZgUQnTKWUT99/exec"; 
+const API_SECRET = "ElementsBox_Seguridad_2026";
 
-// --- COLORES BASADOS EN EL LOGO ---
-const colors = {
-  bg: 'bg-[#e5d3bd]', // Beige fondo
-  surface: 'bg-[#f0e3d1]', // Beige claro para tarjetas
-  textDark: 'text-[#2a241f]', // Marrón/Negro del texto y logo
-  accent: 'bg-[#2a241f]', // Fondo oscuro para botones
-  accentHover: 'hover:bg-[#403831]',
+// --- ESTILOS PERSONALIZADOS PARA REACT ---
+const customStyles = `
+  :root {
+      --color-brand-bg1: 229 211 189;
+      --color-brand-bg2: 212 188 160;
+      --color-brand-dark: 42 36 31;
+  }
+  .bg-brand-bg1 { background-color: rgb(var(--color-brand-bg1)); }
+  .bg-brand-dark { background-color: rgb(var(--color-brand-dark)); }
+  .text-brand-bg1 { color: rgb(var(--color-brand-bg1)); }
+  .text-brand-dark { color: rgb(var(--color-brand-dark)); }
+  .border-brand-dark { border-color: rgb(var(--color-brand-dark)); }
+  
+  .glass-card { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 15px 35px -5px rgba(0,0,0,0.15); }
+  .modal-overlay { background: rgba(10, 8, 7, 0.95); backdrop-filter: blur(10px); }
+  .hide-scroll::-webkit-scrollbar { display: none; }
+  
+  @keyframes blob {
+      0% { transform: translate(0px, 0px) scale(1); }
+      33% { transform: translate(30px, -50px) scale(1.1); }
+      66% { transform: translate(-20px, 20px) scale(0.9); }
+      100% { transform: translate(0px, 0px) scale(1); }
+  }
+  .animate-blob { animation: blob 10s infinite; }
+  .animation-delay-2000 { animation-delay: 2s; }
+  .animation-delay-4000 { animation-delay: 4s; }
+  
+  @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+  .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+  
+  @keyframes slideUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
+  .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+  
+  @keyframes zoomIn { 0% { opacity: 0; transform: scale(0.95) translateY(10px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+  .animate-zoom-in { animation: zoomIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+`;
+
+// --- UTILIDADES (Corregidas para evitar Crash) ---
+const normalizeKeys = (dataArray) => {
+    if (!Array.isArray(dataArray)) return [];
+    return dataArray.map(obj => { 
+        const newObj = {}; 
+        for (let key in obj) newObj[key.trim()] = obj[key]; 
+        return newObj; 
+    });
 };
 
-export default function ElementsBoxApp() {
-  const [user, setUser] = useState(null); // null, { name, role: 'admin'|'user' }
-  const [currentView, setCurrentView] = useState('login'); // login, register, dashboard, academy, blog, admin
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-
-  // Estados de datos
-  const [videos, setVideos] = useState([]);
-  const [blogPosts, setBlogPosts] = useState([]);
-  const [usersList, setUsersList] = useState([]);
-
-  // Mock Data para mostrar si no hay URL conectada
-  const loadMockData = () => {
-    setVideos([
-      { Categoria: 'Gimnásticos', Nombre: 'Pull Ups estrictas', Descripcion: 'Aprende la técnica correcta paso a paso.', URL: 'https://www.youtube.com/watch?v=1' },
-      { Categoria: 'Halterofilia', Nombre: 'Clean & Jerk', Descripcion: 'Conceptos básicos para levantar seguro.', URL: 'https://www.youtube.com/watch?v=2' },
-      { Categoria: 'Metcon', Nombre: 'Burpees eficientes', Descripcion: 'Ahorra energía en tus WODs.', URL: 'https://www.youtube.com/watch?v=3' }
-    ]);
-    setBlogPosts([
-      { Titulo: 'Competencia Interna 2026', Descripcion: 'Inscríbete a nuestra competencia de aniversario este mes.', URL_Imagen: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&q=80&w=1000', Fecha: '15/06/2026' },
-      { Titulo: 'Nuevos Horarios de Open Box', Descripcion: 'Hemos ampliado los horarios para que no te pierdas ningún entreno.', URL_Imagen: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&q=80&w=1000', Fecha: '10/06/2026' }
-    ]);
-    setUsersList([
-      { Nombre: 'Juan Pérez', Correo: 'juan@test.com', Plan: 'Ilimitado', Estado: 'Activo' },
-      { Nombre: 'Ana Gómez', Correo: 'ana@test.com', Plan: '3 Días', Estado: 'Inactivo' }
-    ]);
-  };
-
-  // Función principal para comunicarse con Google Apps Script
-  const apiCall = async (action, payload) => {
-    if (!GOOGLE_SCRIPT_URL) {
-      console.warn("No hay URL de Google Script conectada. Usando simulador.");
-      return simulateApi(action, payload);
-    }
-
-    try {
-      setLoading(true);
-      const response = await fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' }, // Importante para evitar error de CORS en preflight
-        body: JSON.stringify({ action, payload })
-      });
-      const data = await response.json();
-      setLoading(false);
-      return data;
-    } catch (error) {
-      setLoading(false);
-      console.error("Error en API:", error);
-      return { status: 'error', message: 'Error de conexión con el servidor.' };
-    }
-  };
-
-  // Simulador local por si el usuario aún no conecta el Backend
-  const simulateApi = (action, payload) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        if (action === 'login') {
-          if (payload.email === 'admin@elements.com') resolve({ status: 'success', user: { name: 'Admin Elements', role: 'admin' }});
-          else resolve({ status: 'success', user: { name: 'Atleta Prueba', role: 'user', plan: 'Ilimitado', status: 'Activo' }});
-        } else if (action === 'register') {
-          resolve({ status: 'success', user: { name: payload.name, role: 'user', plan: 'Básico', status: 'Activo' }});
-        }
-      }, 1000);
-    });
-  };
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setErrorMsg('');
-    const email = e.target.email.value;
-    const password = e.target.password.value;
+const getVideoData = (url) => {
+    if (!url) return { type: null, id: null };
+    const ytRegex = new RegExp("^.*(youtu\\.be\\/|v\\/|u\\/\\w\\/|embed\\/|watch\\?v=|\\&v=)([^#\\&\\?]*).*");
+    const ytMatch = url.match(ytRegex);
+    if (ytMatch && ytMatch[2].length === 11) return { type: 'youtube', id: ytMatch[2] };
     
-    setLoading(true);
-    const res = await apiCall('login', { email, password });
-    if (res.status === 'success') {
-      setUser(res.user);
-      setCurrentView('dashboard');
-      fetchData(res.user.role);
-    } else {
-      setErrorMsg(res.message);
-      setLoading(false);
-    }
-  };
+    const driveRegex = new RegExp("(?:\\/d\\/|id=)([a-zA-Z0-9_-]+)");
+    const driveMatch = url.match(driveRegex);
+    if (driveMatch) return { type: 'drive', id: driveMatch[1] };
+    
+    return { type: null, id: null };
+};
 
-  const handleRegister = async (e) => {
-    e.preventDefault();
-    setErrorMsg('');
-    const name = e.target.name.value;
-    const email = e.target.email.value;
-    const password = e.target.password.value;
-
-    setLoading(true);
-    const res = await apiCall('register', { name, email, password });
-    if (res.status === 'success') {
-      setUser(res.user);
-      setCurrentView('dashboard');
-      fetchData('user');
-    } else {
-      setErrorMsg(res.message);
-      setLoading(false);
-    }
-  };
-
-  const fetchData = async (role) => {
-    if (!GOOGLE_SCRIPT_URL) {
-      loadMockData();
-      return;
-    }
-    const resVideos = await apiCall('getVideos', {});
-    if (resVideos.status === 'success') setVideos(resVideos.data);
-
-    const resBlog = await apiCall('getBlog', {});
-    if (resBlog.status === 'success') setBlogPosts(resBlog.data);
-
-    if (role === 'admin') {
-      const resUsers = await apiCall('getUsers', { role: 'admin' });
-      if (resUsers.status === 'success') setUsersList(resUsers.data);
-    }
-  };
-
-  // Helper para extraer ID de Youtube
-  const getYoutubeId = (url) => {
+const normalizeImageUrl = (url) => {
     if (!url) return '';
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-  };
+    const driveRegex = new RegExp("(?:\\/d\\/|id=)([a-zA-Z0-9_-]+)");
+    const driveMatch = url.match(driveRegex);
+    if (driveMatch) return `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
+    return url;
+};
 
-  // --- COMPONENTES UI ---
+const formatearFecha = (fechaString) => {
+    if (!fechaString) return 'N/A';
+    const fecha = new Date(fechaString);
+    if(isNaN(fecha)) return fechaString;
+    return fecha.toLocaleDateString('es-CO');
+};
 
-  const Topbar = () => (
-    <div className={`${colors.accent} text-[#e5d3bd] p-4 flex justify-between items-center shadow-lg rounded-b-xl mb-6`}>
-      <div className="flex items-center gap-3 font-bold text-xl tracking-widest uppercase">
-        <Activity className="w-8 h-8" />
-        ELEMENTS BOX
-      </div>
-      {user && (
-        <button onClick={() => { setUser(null); setCurrentView('login'); }} className="flex items-center gap-2 hover:text-white transition-colors">
-          <LogOut className="w-5 h-5" />
-          <span className="hidden sm:inline">Salir</span>
-        </button>
-      )}
-    </div>
-  );
+// Evita crash al parsear fechas en el panel de Admin
+const safeDateStr = (dateStr) => {
+    if(!dateStr) return '';
+    const d = new Date(dateStr);
+    return isNaN(d) ? '' : d.toISOString().split('T')[0];
+};
 
-  const NavMenu = () => (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-      <button onClick={() => setCurrentView('dashboard')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'dashboard' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
-        <UserCircle className="w-6 h-6" /> Perfil
-      </button>
-      <button onClick={() => setCurrentView('academy')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'academy' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
-        <Video className="w-6 h-6" /> Academia
-      </button>
-      <button onClick={() => setCurrentView('blog')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'blog' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
-        <BookOpen className="w-6 h-6" /> Blog
-      </button>
-      {user?.role === 'admin' && (
-        <button onClick={() => setCurrentView('admin')} className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all shadow-md border border-[#2a241f]/10 ${currentView === 'admin' ? `${colors.accent} text-[#e5d3bd]` : `${colors.surface} ${colors.textDark} hover:bg-[#e5cbb0]`}`}>
-          <Users className="w-6 h-6" /> Admin
-        </button>
-      )}
-    </div>
-  );
+const calcularDias = (fecha1, fecha2) => Math.floor((new Date(fecha1) - new Date(fecha2)) / 86400000);
 
-  return (
-    <div className={`min-h-screen ${colors.bg} font-sans`}>
-      <div className="max-w-4xl mx-auto px-4 pb-12">
-        {(user || currentView !== 'login') && <Topbar />}
+export default function App() {
+    const [user, setUser] = useState(null); 
+    const [currentView, setCurrentView] = useState('login'); 
+    const [loading, setLoading] = useState(false);
+    const [dataLoading, setDataLoading] = useState(false);
+    const [errorMsg, setErrorMsg] = useState('');
+    const [successMsg, setSuccessMsg] = useState('');
 
-        {/* VISTAS DE AUTENTICACIÓN */}
-        {!user && currentView === 'login' && (
-          <div className="min-h-[80vh] flex flex-col items-center justify-center">
-             <div className="mb-8 flex flex-col items-center text-center">
-                <div className={`w-24 h-24 rounded-full ${colors.accent} flex items-center justify-center shadow-xl mb-4 border-4 border-[#f0e3d1]`}>
-                    <Activity className="w-12 h-12 text-[#e5d3bd]" />
-                </div>
-                <h1 className={`${colors.textDark} text-4xl font-black uppercase tracking-widest`}>Elements</h1>
-                <h2 className={`${colors.textDark} text-2xl font-light tracking-[0.3em]`}>BOX</h2>
-             </div>
-             
-             <div className={`${colors.surface} p-8 rounded-2xl shadow-xl w-full max-w-md border border-[#2a241f]/10`}>
-                <h3 className={`text-2xl font-bold ${colors.textDark} mb-6 text-center`}>Iniciar Sesión</h3>
-                {errorMsg && <div className="bg-red-100 text-red-800 p-3 rounded-lg mb-4 text-sm text-center">{errorMsg}</div>}
+    const [videos, setVideos] = useState([]);
+    const [blogPosts, setBlogPosts] = useState([]);
+    const [usersList, setUsersList] = useState([]);
+    const [rankingList, setRankingList] = useState([]);
+    const [retosList, setRetosList] = useState([]);
+    const [planesList, setPlanesList] = useState({ elementa: [], antiguos: [] });
+
+    const [searchTerm, setSearchTerm] = useState('');
+    const [expandedCategories, setExpandedCategories] = useState({});
+    const [selectedPost, setSelectedPost] = useState(null); 
+    const [selectedVideo, setSelectedVideo] = useState(null); 
+    const [restrictedPopup, setRestrictedPopup] = useState(false);
+
+    // Estados Admin
+    const [adminTab, setAdminTab] = useState('atletas'); 
+    const [editingUser, setEditingUser] = useState(null);
+    const [planTypeSelection, setPlanTypeSelection] = useState('elementa');
+
+    useEffect(() => {
+        const sessionUser = localStorage.getItem('elementsSession');
+        if(sessionUser) {
+            const parsedUser = JSON.parse(sessionUser);
+            setUser(parsedUser);
+            setCurrentView('dashboard');
+            fetchData(parsedUser.role, parsedUser.status);
+        }
+    }, []);
+
+    const apiCall = async (action, payload) => {
+        try {
+            const response = await fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST', 
+                headers: { 'Content-Type': 'text/plain' }, 
+                body: JSON.stringify({ action, payload, apiSecret: API_SECRET })
+            });
+            return await response.json();
+        } catch (error) {
+            return { status: 'error', message: 'Error de conexión con el servidor.' };
+        }
+    };
+
+    const handleAuth = async (e, action) => {
+        e.preventDefault(); setErrorMsg(''); setLoading(true);
+        let payload = { email: e.target.email.value, password: e.target.password.value };
+        if (action === 'register') {
+            payload = {
+                ...payload, nombres: e.target.nombres.value, apellidos: e.target.apellidos.value, 
+                cedula: e.target.cedula.value, telefono: e.target.telefono.value, eps: e.target.eps.value, 
+                fechaNac: e.target.fechaNac.value, contactoEmergencia: e.target.contactoEmergencia.value, 
+                parentesco: e.target.parentesco.value
+            };
+        }
+        const res = await apiCall(action, payload);
+        if (res.status === 'success') {
+            setUser(res.user); 
+            localStorage.setItem('elementsSession', JSON.stringify(res.user)); 
+            setCurrentView('dashboard'); 
+            fetchData(res.user.role, res.user.status);
+        } else { 
+            setErrorMsg(res.message); 
+        }
+        setLoading(false);
+    };
+
+    const handleLogout = () => { 
+        setUser(null); 
+        setCurrentView('login'); 
+        localStorage.removeItem('elementsSession'); 
+    };
+
+    const handleNavigation = (view) => {
+        if (['academy', 'ranking'].includes(view)) {
+            if (user.role !== 'admin' && (user.status || '').trim().toLowerCase() !== 'activo') {
+                setRestrictedPopup(true); 
+                return;
+            }
+        }
+        setCurrentView(view); 
+        window.scrollTo(0, 0);
+    };
+
+    // Bloque Try-Catch para evitar carga infinita si Google rechaza algo
+    const fetchData = async (role, userStatus) => {
+        setDataLoading(true);
+        try {
+            const resBlog = await apiCall('getBlog', {});
+            if (resBlog.status === 'success') setBlogPosts(normalizeKeys(resBlog.data).reverse()); 
+
+            if (role === 'admin' || String(userStatus || '').trim().toLowerCase() === 'activo') {
+                const resVideos = await apiCall('getVideos', {});
+                if (resVideos.status === 'success') {
+                    const cv = normalizeKeys(resVideos.data); 
+                    setVideos(cv);
+                    if(cv.length > 0) setExpandedCategories({ [cv[0].Categoria || 'General']: true });
+                }
+                const resRanking = await apiCall('getRanking', {});
+                if (resRanking.status === 'success') setRankingList(normalizeKeys(resRanking.data));
                 
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div>
-                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}><Mail className="inline w-4 h-4 mr-1"/>Correo Electrónico</label>
-                    <input type="email" name="email" required className="w-full p-3 rounded-lg border-2 border-transparent focus:border-[#2a241f] bg-white outline-none transition-all" placeholder="tu@correo.com" />
-                  </div>
-                  <div>
-                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}><Lock className="inline w-4 h-4 mr-1"/>Contraseña</label>
-                    <input type="password" name="password" required className="w-full p-3 rounded-lg border-2 border-transparent focus:border-[#2a241f] bg-white outline-none transition-all" placeholder="••••••••" />
-                  </div>
-                  <button type="submit" disabled={loading} className={`w-full ${colors.accent} text-[#e5d3bd] p-3 rounded-lg font-bold text-lg mt-2 ${colors.accentHover} transition-colors shadow-md flex justify-center items-center`}>
-                    {loading ? 'Cargando...' : 'Entrar al Box'} <ChevronRight className="w-5 h-5 ml-1"/>
-                  </button>
-                </form>
+                const resRetos = await apiCall('getRetos', {});
+                if (resRetos.status === 'success') setRetosList(normalizeKeys(resRetos.data).reverse());
+            }
 
-                <p className={`mt-6 text-center text-sm ${colors.textDark}`}>
-                  ¿Eres nuevo atleta? <button onClick={() => setCurrentView('register')} className="font-bold underline">Regístrate aquí</button>
-                </p>
+            if (role === 'admin') {
+                const resUsers = await apiCall('getUsers', { role: 'admin' });
+                if (resUsers.status === 'success') setUsersList(normalizeKeys(resUsers.data));
+                const resPlanes = await apiCall('getPlanes', {});
+                if (resPlanes.status === 'success') setPlanesList(resPlanes.data);
+            }
+        } catch (err) {
+            console.error("Error cargando datos:", err);
+        } finally {
+            setDataLoading(false);
+        }
+    };
 
-                {!GOOGLE_SCRIPT_URL && (
-                  <div className="mt-8 p-3 bg-yellow-100/50 border border-yellow-600/30 rounded-lg text-xs text-yellow-800 text-center">
-                    Modo Demo activo. Usa <b>admin@elements.com</b> para ver la vista de Administrador, o cualquier otro para vista de Atleta.
-                  </div>
-                )}
-             </div>
-          </div>
-        )}
+    // ---- LÓGICA DE ADMINISTRADOR: EDITAR USUARIO ----
+    const openEditModal = (u) => {
+        let initType = 'elementa';
+        if(planesList.antiguos?.some(p => p.plan === u.Plan)) initType = 'antiguos';
+        setPlanTypeSelection(initType);
+        setEditingUser({
+            ...u,
+            'Fecha Ingreso': safeDateStr(u['Fecha Ingreso']),
+            'Fecha de Caducidad': safeDateStr(u['Fecha de Caducidad'])
+        });
+    };
 
-        {!user && currentView === 'register' && (
-          <div className="min-h-[80vh] flex flex-col items-center justify-center">
-             <div className={`${colors.surface} p-8 rounded-2xl shadow-xl w-full max-w-md border border-[#2a241f]/10`}>
-                <h3 className={`text-2xl font-bold ${colors.textDark} mb-6 text-center`}>Nuevo Atleta</h3>
-                {errorMsg && <div className="bg-red-100 text-red-800 p-3 rounded-lg mb-4 text-sm text-center">{errorMsg}</div>}
-                
-                <form onSubmit={handleRegister} className="space-y-4">
-                  <div>
-                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Nombre Completo</label>
-                    <input type="text" name="name" required className="w-full p-3 rounded-lg bg-white outline-none" placeholder="Juan Pérez" />
-                  </div>
-                  <div>
-                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Correo Electrónico</label>
-                    <input type="email" name="email" required className="w-full p-3 rounded-lg bg-white outline-none" placeholder="tu@correo.com" />
-                  </div>
-                  <div>
-                    <label className={`block text-sm font-semibold ${colors.textDark} mb-1`}>Contraseña</label>
-                    <input type="password" name="password" required className="w-full p-3 rounded-lg bg-white outline-none" placeholder="••••••••" />
-                  </div>
-                  <button type="submit" disabled={loading} className={`w-full ${colors.accent} text-[#e5d3bd] p-3 rounded-lg font-bold text-lg mt-2 ${colors.accentHover} transition-colors shadow-md`}>
-                    {loading ? 'Creando...' : 'Crear Cuenta'}
-                  </button>
-                </form>
-                <p className={`mt-6 text-center text-sm ${colors.textDark}`}>
-                  ¿Ya tienes cuenta? <button onClick={() => setCurrentView('login')} className="font-bold underline">Inicia Sesión</button>
-                </p>
-             </div>
-          </div>
-        )}
+    const calculateAutoExpiry = (fechaInicio, planName, planType) => {
+        if(!fechaInicio || !planName) return '';
+        const planInfo = planesList[planType]?.find(p => p.plan === planName);
+        if(!planInfo || !planInfo.periodo) return '';
+        
+        let date = new Date(fechaInicio);
+        if(isNaN(date)) return '';
 
-        {/* APLICACIÓN PRINCIPAL */}
-        {user && (
-          <>
-            <NavMenu />
+        const per = planInfo.periodo.toLowerCase();
+        if(per.includes('12 clases')) return ''; 
+        // Usamos métodos UTC para evitar que el timezone corra la fecha 1 día hacia atrás
+        if(per.includes('mensual')) date.setUTCMonth(date.getUTCMonth() + 1);
+        else if(per.includes('semestre')) date.setUTCMonth(date.getUTCMonth() + 6);
+        else if(per.includes('año') || per.includes('anual')) date.setUTCFullYear(date.getUTCFullYear() + 1);
+        
+        return date.toISOString().split('T')[0];
+    };
 
-            {/* DASHBOARD (PERFIL) */}
-            {currentView === 'dashboard' && (
-              <div className={`${colors.surface} p-6 md:p-8 rounded-2xl shadow-lg border border-[#2a241f]/10`}>
-                <h2 className={`text-3xl font-black ${colors.textDark} mb-2 uppercase`}>¡Hola, {user.name}!</h2>
-                <p className={`${colors.textDark}/80 mb-8`}>Bienvenido a Elements Box.</p>
-                
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <h3 className={`font-bold ${colors.textDark} text-lg mb-4 flex items-center border-b pb-2`}><UserCircle className="mr-2"/> Datos de Cuenta</h3>
-                    <p className="mb-2"><span className="text-gray-500 text-sm">Rol:</span> <strong className="uppercase">{user.role}</strong></p>
-                    <p className="mb-2"><span className="text-gray-500 text-sm">Correo:</span> <strong>{user.email}</strong></p>
-                    {user.role === 'user' && (
-                      <>
-                        <p className="mb-2"><span className="text-gray-500 text-sm">Plan actual:</span> <span className="bg-[#2a241f] text-[#e5d3bd] px-2 py-1 rounded text-xs font-bold uppercase">{user.plan || 'Básico'}</span></p>
-                        <p className="mb-2"><span className="text-gray-500 text-sm">Estado:</span> <span className="text-green-600 font-bold">{user.status || 'Activo'}</span></p>
-                      </>
-                    )}
-                  </div>
+    const handleAdminUpdateUser = async (e) => {
+        e.preventDefault(); setLoading(true); setErrorMsg(''); setSuccessMsg('');
+        
+        const dataToSave = {
+            'Nombres': e.target.nombres.value,
+            'Apellidos': e.target.apellidos.value,
+            'Cedula': e.target.cedula.value,
+            'Telefono': e.target.telefono.value,
+            'Plan': e.target.plan.value,
+            'Estado': e.target.estado.value,
+            'Fecha Ingreso': e.target.ingreso.value,
+            'Fecha de Caducidad': e.target.caducidad ? e.target.caducidad.value : '',
+            'Días Restantes': e.target.clases ? e.target.clases.value : editingUser['Días Restantes']
+        };
 
-                  <div className={`${colors.accent} text-[#e5d3bd] p-6 rounded-xl shadow-sm flex flex-col justify-center items-center text-center`}>
-                    <Activity className="w-16 h-16 mb-4 opacity-50" />
-                    <h3 className="font-bold text-xl mb-2">WOD del Día</h3>
-                    <p className="text-sm opacity-80">Revisa la sección de Blog para enterarte de las novedades o ve a la Academia para mejorar tu técnica.</p>
-                  </div>
-                </div>
-              </div>
+        const linkedEmail = e.target.pareja ? e.target.pareja.value : null;
+
+        const res = await apiCall('updateUser', { adminRole: user.role, email: editingUser.Correo, data: dataToSave, linkedEmail });
+        if(res.status === 'success') {
+            setSuccessMsg('Atleta actualizado correctamente');
+            setEditingUser(null);
+            fetchData(user.role, user.status); 
+        } else setErrorMsg(res.message);
+        setLoading(false);
+    };
+
+    // ---- LÓGICA DE RETOS Y BLOG ----
+    const handleAdminAddBlog = async (e) => {
+        e.preventDefault(); setLoading(true); setErrorMsg(''); setSuccessMsg('');
+        const fileInput = e.target.imagen.files[0];
+        let imageUrl = '';
+        if (fileInput) {
+            setSuccessMsg('Subiendo foto a Drive...');
+            const reader = new FileReader();
+            reader.readAsDataURL(fileInput);
+            await new Promise(resolve => reader.onload = () => {
+                apiCall('uploadImage', { adminRole: user.role, base64: reader.result, filename: fileInput.name })
+                    .then(up => { if(up.status === 'success') imageUrl = up.url; resolve(); });
+            });
+        }
+        const res = await apiCall('addBlog', {
+            adminRole: user.role, titulo: e.target.titulo.value, etiqueta: e.target.etiqueta.value,
+            descripcion: e.target.descCorta.value, // Asegura compatibilidad con el backend 
+            descripcionCorta: e.target.descCorta.value, contenido: e.target.contenido.value,
+            autor: e.target.autor.value, urlImagen: imageUrl
+        });
+        if(res.status === 'success') { setSuccessMsg('Noticia publicada'); e.target.reset(); fetchData(user.role, user.status); } 
+        else setErrorMsg(res.message);
+        setLoading(false); setTimeout(() => setSuccessMsg(''), 4000);
+    };
+
+    const handleAdminAddReto = async (e) => {
+        e.preventDefault(); setLoading(true); setErrorMsg(''); setSuccessMsg('');
+        const res = await apiCall('addReto', {
+            adminRole: user.role, titulo: e.target.titulo.value, descripcion: e.target.descripcion.value,
+            redSocial: e.target.redSocial.value, puntos: e.target.puntos.value
+        });
+        if(res.status === 'success') { setSuccessMsg('Reto publicado'); e.target.reset(); fetchData(user.role, user.status); } 
+        else setErrorMsg(res.message);
+        setLoading(false); setTimeout(() => setSuccessMsg(''), 4000);
+    };
+
+    // ---- AYUDANTES VISUALES ----
+    const getDiasBadge = (u) => {
+        const stat = String(u.Estado || '').trim().toLowerCase();
+        const hoy = new Date(); const today = new Date(hoy.setHours(0,0,0,0));
+        
+        if(stat === 'aspirante') {
+            if(!u['Fecha Registro']) return null;
+            const d = calcularDias(today, u['Fecha Registro']);
+            return <span className="text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded text-[10px] font-black">Hace {d} días</span>;
+        }
+        if(stat === 'inactivo') {
+            if(!u['Fecha de Caducidad']) return null;
+            const d = calcularDias(today, u['Fecha de Caducidad']);
+            return <span className="text-red-700 bg-red-100 px-2 py-0.5 rounded text-[10px] font-black">Vencido hace {d} días</span>;
+        }
+        if(stat === 'activo') {
+            if(String(u.Plan || '').includes('12 Clases')) return <span className="text-blue-700 bg-blue-100 px-2 py-0.5 rounded text-[10px] font-black">{u['Días Restantes']} Clases Rest.</span>;
+            if(!u['Fecha de Caducidad']) return null;
+            const d = calcularDias(u['Fecha de Caducidad'], today);
+            if(0 > d) return <span className="text-red-700 bg-red-100 px-2 py-0.5 rounded text-[10px] font-black">Debe renovar</span>;
+            return <span className="text-green-700 bg-green-100 px-2 py-0.5 rounded text-[10px] font-black">Le quedan {d} días</span>;
+        }
+        return null;
+    };
+
+    const verificarCaducidad = (fechaCaducidad) => {
+        if (!fechaCaducidad) return null;
+        const expDate = new Date(fechaCaducidad);
+        if(isNaN(expDate)) return null;
+        const today = new Date(); today.setHours(0,0,0,0); expDate.setHours(0,0,0,0);
+        const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+
+        if (0 > diffDays) return { estado: 'vencido', mensaje: 'Membresía Vencida', dias: diffDays };
+        if (0 === diffDays) return { estado: 'alerta', mensaje: 'Tu membresía vence HOY', dias: diffDays };
+        if (5 >= diffDays) return { estado: 'aviso', mensaje: `Vence en ${diffDays} día(s)`, dias: diffDays };
+        return { estado: 'bien', mensaje: `Vence el ${formatearFecha(fechaCaducidad)}` };
+    };
+
+    const infoCaducidad = user && !String(user.plan || '').includes('12 Clases') ? verificarCaducidad(user.caducidad) : null;
+    const misPuntos = rankingList.find(r => String(r.Nombre || r.Nombres || '').toLowerCase() === String(user?.name || '').toLowerCase())?.Puntos || 0;
+
+    const Loader = () => <div className="flex justify-center py-12"><div className="w-10 h-10 border-4 border-brand-dark border-t-transparent rounded-full animate-spin"></div></div>;
+
+    const groupedFilteredVideos = useMemo(() => {
+        const lowerSearch = searchTerm.toLowerCase();
+        const filtered = videos.filter(v => String(v.Nombre || '').toLowerCase().includes(lowerSearch) || String(v.Descripcion || '').toLowerCase().includes(lowerSearch));
+        return filtered.reduce((acc, v) => {
+            const cat = v.Categoria || 'General';
+            if (!acc[cat]) acc[cat] = []; acc[cat].push(v); return acc;
+        }, {});
+    }, [videos, searchTerm]);
+
+    const toggleCategory = (cat) => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
+
+    const Topbar = () => (
+        <div className="sticky top-0 z-[100] bg-brand-bg1/90 backdrop-blur-xl px-6 py-4 flex justify-between items-center shadow-sm border-b border-white/20">
+            <div className="flex items-center gap-2">
+                <div className="bg-brand-dark p-2 rounded-lg shadow-lg"><Activity className="w-5 h-5 text-brand-bg1" /></div>
+                <span className="font-black text-xl tracking-widest uppercase text-brand-dark">Elements</span>
+            </div>
+            {user && (
+                <button onClick={handleLogout} className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-black/5 transition-colors text-brand-dark/80 font-bold text-xs uppercase tracking-wider">
+                    Salir <LogOut className="w-4 h-4" />
+                </button>
             )}
+        </div>
+    );
 
-            {/* ACADEMIA (VIDEOS YOUTUBE) */}
-            {currentView === 'academy' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><Play className="mr-3 w-8 h-8"/> Academia Elements</h2>
-                </div>
-                
-                {videos.length === 0 ? (
-                   <p className="text-center py-10 opacity-60">Aún no hay videos subidos.</p>
-                ) : (
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {videos.map((vid, idx) => {
-                      const ytId = getYoutubeId(vid.URL || '');
-                      return (
-                        <div key={idx} className={`${colors.surface} rounded-xl overflow-hidden shadow-lg border border-[#2a241f]/10 flex flex-col`}>
-                          {ytId ? (
-                            <div className="relative w-full pt-[56.25%] bg-black">
-                              <iframe 
-                                className="absolute top-0 left-0 w-full h-full"
-                                src={`https://www.youtube.com/embed/${ytId}`} 
-                                title={vid.Nombre}
-                                frameBorder="0" 
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                allowFullScreen
-                              ></iframe>
+    const BottomNav = () => (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-md bg-brand-dark/95 backdrop-blur-lg p-2 rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.4)] flex justify-between items-center z-[100] border border-white/10">
+            {['dashboard', 'academy', 'ranking', 'blog'].map(view => {
+                const isApp = currentView === view;
+                const icons = { dashboard: UserCircle, academy: Video, ranking: Trophy, blog: BookOpen };
+                const labels = { dashboard: 'Inicio', academy: 'Aprende', ranking: 'Ranking', blog: 'Blog' };
+                const Icon = icons[view];
+                return (
+                    <button key={view} onClick={() => handleNavigation(view)} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${isApp ? 'bg-brand-bg1 w-28 text-brand-dark shadow-md' : 'text-white/60 hover:text-white flex-1'}`}>
+                        <Icon className="w-5 h-5" />
+                        {isApp && <span className="ml-1.5 text-xs font-black uppercase tracking-wider animate-fade-in">{labels[view]}</span>}
+                    </button>
+                );
+            })}
+            {user?.role === 'admin' && (
+                <button onClick={() => handleNavigation('admin')} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${currentView === 'admin' ? 'bg-brand-bg1 w-28 text-brand-dark shadow-md' : 'text-white/60 hover:text-white flex-1'}`}>
+                    <Users className="w-5 h-5" />
+                    {currentView === 'admin' && <span className="ml-1.5 text-xs font-black uppercase tracking-wider animate-fade-in">Admin</span>}
+                </button>
+            )}
+        </div>
+    );
+
+    return (
+        <div className="relative min-h-screen overflow-x-hidden bg-brand-bg1 text-brand-dark font-sans selection:bg-brand-dark selection:text-white">
+            <style dangerouslySetInnerHTML={{ __html: customStyles }} />
+            
+            <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+                <div className="absolute top-0 -left-10 w-72 h-72 bg-[#f4e6d4] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob"></div>
+                <div className="absolute top-40 right-0 w-80 h-80 bg-[#cbb092] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000"></div>
+                <div className="absolute -bottom-20 left-20 w-96 h-96 bg-[#dfc5a6] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000"></div>
+            </div>
+
+            <div className="relative z-10 pb-32">
+                {(user || currentView !== 'login') && <Topbar />}
+
+                <div className="max-w-4xl mx-auto px-4 pt-6">
+                    
+                    {!user && (currentView === 'login' || currentView === 'register') && (
+                        <div className="flex flex-col items-center justify-center animate-slide-up py-10">
+                            <div className="mb-8 flex flex-col items-center">
+                                <div className="w-24 h-24 rounded-[2rem] bg-brand-dark flex items-center justify-center shadow-2xl mb-4 rotate-3 border-4 border-white/20"><Activity className="w-12 h-12 text-brand-bg1 -rotate-3" /></div>
+                                <h1 className="text-4xl font-black uppercase tracking-widest text-brand-dark drop-shadow-sm">Elements</h1>
+                                <h2 className="text-xl font-medium tracking-[0.4em] text-brand-dark/70">TRAINING BOX</h2>
                             </div>
-                          ) : (
-                            <div className="w-full h-48 bg-gray-300 flex items-center justify-center text-gray-500">Video no válido</div>
-                          )}
-                          <div className="p-5 flex-1 flex flex-col">
-                            <span className="text-xs font-bold text-[#2a241f]/60 uppercase tracking-wider mb-1">{vid.Categoria}</span>
-                            <h3 className={`text-xl font-bold ${colors.textDark} mb-2`}>{vid.Nombre}</h3>
-                            <p className="text-sm text-gray-700 mt-auto">{vid.Descripcion}</p>
-                          </div>
+                            
+                            <div className="glass-card p-6 sm:p-8 rounded-[2.5rem] w-full max-w-md">
+                                <h3 className="text-2xl font-black mb-6 text-center">{currentView === 'login' ? 'Bienvenido' : 'Crear Cuenta'}</h3>
+                                {errorMsg && <div className="bg-red-500/10 text-red-700 p-3 rounded-xl mb-6 text-sm font-bold text-center border border-red-500/20">{errorMsg}</div>}
+                                
+                                <form onSubmit={(e) => handleAuth(e, currentView)} className="space-y-4">
+                                    {currentView === 'register' && (
+                                        <div className="h-64 overflow-y-auto hide-scroll space-y-4 px-1 pb-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Nombres</label><input type="text" name="nombres" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                                <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Apellidos</label><input type="text" name="apellidos" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Cédula</label><input type="number" name="cedula" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                                <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Teléfono</label><input type="tel" name="telefono" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">EPS</label><input type="text" name="eps" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                                <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Nacimiento</label><input type="date" name="fechaNac" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                            </div>
+                                            <div className="p-4 bg-brand-dark/5 rounded-xl border border-brand-dark/10 space-y-4">
+                                                <p className="text-[10px] font-black uppercase text-brand-dark/50">Contacto de Emergencia</p>
+                                                <input type="text" name="contactoEmergencia" required placeholder="Nombre y Teléfono" className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" />
+                                                <input type="text" name="parentesco" required placeholder="Parentesco (Ej: Madre)" className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" />
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Correo Electrónico</label><input type="email" name="email" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                    <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Contraseña</label><input type="password" name="password" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                    
+                                    <button type="submit" disabled={loading} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black text-lg mt-2 hover:scale-[1.02] transition-transform shadow-xl">
+                                        {loading ? 'Procesando...' : (currentView === 'login' ? 'Entrar al Box' : 'Crear Mi Cuenta')}
+                                    </button>
+                                </form>
+                                <div className="mt-6 text-center">
+                                    <button onClick={() => setCurrentView(currentView === 'login' ? 'register' : 'login')} className="text-xs font-bold text-brand-dark/80 hover:text-brand-dark underline decoration-2 underline-offset-4">
+                                        {currentView === 'login' ? 'No tengo cuenta, registrarme' : 'Ya tengo cuenta, iniciar sesión'}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+                    )}
 
-            {/* BLOG (NOTICIAS / EVENTOS) */}
-            {currentView === 'blog' && (
-              <div className="space-y-6">
-                <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><BookOpen className="mr-3 w-8 h-8"/> Novedades</h2>
-                
-                {blogPosts.length === 0 ? (
-                   <p className="text-center py-10 opacity-60">Aún no hay publicaciones.</p>
-                ) : (
-                  <div className="grid md:grid-cols-2 gap-8">
-                    {blogPosts.map((post, idx) => (
-                      <div key={idx} className={`bg-white rounded-2xl overflow-hidden shadow-xl border border-transparent hover:border-[#2a241f]/30 transition-all group`}>
-                        {post.URL_Imagen && (
-                          <div className="h-56 overflow-hidden">
-                            <img src={post.URL_Imagen} alt={post.Titulo} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                          </div>
-                        )}
-                        <div className="p-6">
-                          <div className="flex items-center text-xs font-bold text-[#2a241f]/50 mb-3">
-                            <Calendar className="w-4 h-4 mr-1"/> {post.Fecha || 'Reciente'}
-                          </div>
-                          <h3 className={`text-2xl font-black ${colors.textDark} mb-3 leading-tight`}>{post.Titulo}</h3>
-                          <p className="text-gray-600 leading-relaxed">{post.Descripcion}</p>
+                    {user && (
+                        <div className="animate-slide-up space-y-8">
+                            
+                            {currentView === 'dashboard' && (
+                                <div className="space-y-6">
+                                    <div className="flex items-end justify-between px-2">
+                                        <div>
+                                            <p className="text-sm font-bold text-brand-dark/50 uppercase tracking-wider">Tu Perfil</p>
+                                            <h2 className="text-4xl font-black uppercase leading-none mt-1">{(user.name || 'Atleta').split(' ')[0]}</h2>
+                                        </div>
+                                        <div className="flex flex-col items-center">
+                                            <div className="w-14 h-14 bg-brand-dark text-brand-bg1 rounded-full flex items-center justify-center font-black text-2xl shadow-lg ring-4 ring-white/30">{(user.name || 'E').charAt(0).toUpperCase()}</div>
+                                        </div>
+                                    </div>
+
+                                    {infoCaducidad && (infoCaducidad.estado === 'vencido' || infoCaducidad.estado === 'alerta' || infoCaducidad.estado === 'aviso') && (
+                                        <div className={`glass-card p-4 rounded-2xl flex items-start gap-3 border-l-4 ${infoCaducidad.estado === 'vencido' ? 'border-red-600' : 'border-yellow-500'}`}>
+                                            <AlertCircle className={`w-6 h-6 shrink-0 mt-0.5 ${infoCaducidad.estado === 'vencido' ? 'text-red-600' : 'text-yellow-600'}`} />
+                                            <div>
+                                                <p className={`font-black text-sm uppercase ${infoCaducidad.estado === 'vencido' ? 'text-red-800' : 'text-yellow-800'}`}>Aviso Importante</p>
+                                                <p className={`text-sm font-bold ${infoCaducidad.estado === 'vencido' ? 'text-red-700' : 'text-yellow-700'}`}>{infoCaducidad.mensaje}</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="glass-card rounded-[2rem] p-6 flex flex-col sm:flex-row gap-4">
+                                        <div className="flex-1 bg-white/40 p-5 rounded-2xl flex justify-between items-center border border-white/50">
+                                            <div>
+                                                <p className="text-[10px] font-black text-brand-dark/50 uppercase tracking-wider">Plan / Suscripción</p>
+                                                <p className="text-2xl font-black uppercase">{user.plan || 'Ninguno'}</p>
+                                                {String(user.plan || '').includes('12 Clases') ? 
+                                                    <div className="flex items-center gap-1 text-brand-dark/80 font-black text-xs mt-1"><Clock className="w-3 h-3"/> <p>Te quedan {user.diasRestantes || 0} clases</p></div> :
+                                                    (infoCaducidad && infoCaducidad.estado === 'bien' && <div className="flex items-center gap-1 text-brand-dark/70 font-bold text-[10px] mt-1"><Clock className="w-3 h-3"/> <p>{infoCaducidad.mensaje}</p></div>)
+                                                }
+                                            </div>
+                                            <div className={`px-5 py-2.5 rounded-full text-xs font-black uppercase shadow-md ${user.status.trim().toLowerCase() === 'activo' ? 'bg-green-500 text-white' : (user.status.trim().toLowerCase() === 'aspirante' ? 'bg-yellow-500 text-white' : 'bg-red-500 text-white')}`}>{user.status || 'Aspirante'}</div>
+                                        </div>
+                                        <div className="bg-brand-dark text-brand-bg1 p-5 rounded-2xl flex flex-col justify-center items-center shadow-xl min-w-[120px]">
+                                            <Trophy className="w-6 h-6 mb-1 opacity-70" />
+                                            <p className="text-[10px] font-black opacity-60 uppercase tracking-wider">Tus Puntos</p>
+                                            <p className="text-4xl font-black">{misPuntos}</p>
+                                        </div>
+                                    </div>
+
+                                    {user.status.trim().toLowerCase() === 'activo' && retosList.length > 0 && (
+                                        <div className="mt-8 space-y-4">
+                                            <div className="flex items-center gap-2 px-2"><Target className="w-5 h-5 text-brand-dark/70"/><h3 className="font-black uppercase text-lg">Retos Activos</h3></div>
+                                            {retosList.map((reto, idx) => (
+                                                <div key={idx} className="glass-card p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 group hover:bg-white/50 transition-colors border border-white/50">
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <h4 className="font-black text-brand-dark uppercase">{reto.Titulo}</h4>
+                                                            <span className="bg-brand-dark text-brand-bg1 text-[10px] px-2 py-0.5 rounded-full font-black">+{reto.Puntos} PTS</span>
+                                                        </div>
+                                                        <p className="text-sm font-medium text-brand-dark/70">{reto.Descripcion}</p>
+                                                    </div>
+                                                    <button onClick={() => window.open(reto['Red Social'] === 'WhatsApp' ? 'https://wa.me/?text=¡Cumpliendo%20mi%20reto%20en%20Elements%20Box!' : 'https://google.com', '_blank')} className="shrink-0 bg-brand-dark text-brand-bg1 px-5 py-3 rounded-xl font-black text-xs uppercase hover:scale-105 transition-transform shadow-lg">
+                                                        Cumplir en {reto['Red Social']}
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    
+                                    {user.status.trim().toLowerCase() !== 'activo' && (
+                                        <div className="bg-brand-dark/5 p-4 rounded-2xl flex items-start gap-3 mt-2">
+                                            <Lock className="w-5 h-5 text-brand-dark/60 shrink-0 mt-0.5" />
+                                            <p className="text-sm font-bold text-brand-dark/80 leading-relaxed">Tu cuenta no está activa. Renueva en recepción para acceder a retos, videos de academia y sumarte al ranking.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {currentView === 'academy' && (
+                                <div className="space-y-6">
+                                    <div className="px-2">
+                                        <h2 className="text-4xl font-black uppercase leading-none mt-1">Academia</h2>
+                                        <p className="text-sm font-bold text-brand-dark/50 mt-2">Domina tu técnica</p>
+                                    </div>
+                                    <div className="relative">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-dark/50" />
+                                        <input type="text" placeholder="Buscar movimiento..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white/60 focus:bg-white outline-none transition-all shadow-inner font-bold text-brand-dark" />
+                                    </div>
+                                    {dataLoading ? <Loader /> : (
+                                        <div className="space-y-4">
+                                            {Object.keys(groupedFilteredVideos).map((category, catIdx) => (
+                                                <div key={catIdx} className="glass-card rounded-[1.5rem] overflow-hidden border border-white/40">
+                                                    <button onClick={() => toggleCategory(category)} className="w-full p-5 flex justify-between items-center hover:bg-white/40 transition-colors">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="bg-brand-dark text-brand-bg1 w-7 h-7 rounded-full flex items-center justify-center font-black text-xs shadow-inner">{groupedFilteredVideos[category].length}</div>
+                                                            <h3 className="font-black text-lg uppercase tracking-wider">{category}</h3>
+                                                        </div>
+                                                        {expandedCategories[category] ? <ChevronUp className="w-5 h-5 opacity-50"/> : <ChevronDown className="w-5 h-5 opacity-50"/>}
+                                                    </button>
+                                                    {expandedCategories[category] && (
+                                                        <div className="p-4 grid grid-cols-1 gap-4 bg-black/5 animate-fade-in border-t border-white/20">
+                                                            {groupedFilteredVideos[category].map((vid, vIdx) => {
+                                                                const videoInfo = getVideoData(vid.URL || '');
+                                                                return (
+                                                                    <div key={vIdx} onClick={() => setSelectedVideo(videoInfo)} className="bg-white rounded-2xl p-4 flex items-center gap-4 shadow-sm cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all">
+                                                                        <div className="w-16 h-16 shrink-0 bg-brand-dark/10 rounded-xl flex items-center justify-center relative overflow-hidden group"><Play className="w-6 h-6 text-brand-dark group-hover:scale-125 transition-transform" /></div>
+                                                                        <div><h4 className="font-black text-lg leading-tight uppercase mb-1">{vid.Nombre}</h4><p className="text-xs text-brand-dark/60 font-bold line-clamp-1">{vid.Descripcion}</p></div>
+                                                                    </div>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {currentView === 'blog' && (
+                                <div className="space-y-6">
+                                    <div className="px-2">
+                                        <h2 className="text-4xl font-black uppercase leading-none mt-1">Blog Box</h2>
+                                        <p className="text-sm font-bold text-brand-dark/50 mt-2">Noticias y Comunidad</p>
+                                    </div>
+                                    {dataLoading ? <Loader /> : (
+                                        <div className="grid grid-cols-1 gap-8">
+                                            {blogPosts.map((post, idx) => {
+                                                const imgUrl = normalizeImageUrl(post.URL_Imagen);
+                                                return (
+                                                    <div key={idx} onClick={() => setSelectedPost({...post, cleanImg: imgUrl})} className="glass-card rounded-[2rem] overflow-hidden group hover:shadow-2xl transition-all duration-300 relative cursor-pointer flex flex-col border border-white/40">
+                                                        {imgUrl && (
+                                                            <div className="h-48 sm:h-72 w-full relative overflow-hidden bg-brand-dark">
+                                                                <img src={imgUrl} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-90" alt="News" />
+                                                            </div>
+                                                        )}
+                                                        <div className="p-6 bg-white/40 flex-1 flex flex-col">
+                                                            <div className="flex justify-between items-start mb-3">
+                                                                <span className="bg-brand-dark text-brand-bg1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">{post.Etiqueta || 'Novedad'}</span>
+                                                                <span className="text-[10px] font-bold text-brand-dark/50 uppercase">{post.Fecha}</span>
+                                                            </div>
+                                                            <h3 className="text-2xl font-black leading-tight mb-2">{post.Titulo}</h3>
+                                                            <p className="font-medium text-brand-dark/70 text-sm mb-4 line-clamp-2">{post['Descripcion Corta'] || post.Descripcion}</p>
+                                                            <div className="mt-auto pt-4 border-t border-brand-dark/10 flex items-center justify-between">
+                                                                <span className="text-xs font-bold text-brand-dark/60">{post.Autor || 'Elements'}</span>
+                                                                <span className="text-xs font-black uppercase flex items-center">Leer más <Play className="w-3 h-3 ml-1"/></span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {currentView === 'ranking' && (
+                                <div className="space-y-6">
+                                    <div className="px-2">
+                                        <h2 className="text-4xl font-black uppercase leading-none mt-1">Leaderboard</h2>
+                                        <p className="text-sm font-bold text-brand-dark/50 mt-2">Puntuación por Asistencia y Retos</p>
+                                    </div>
+                                    <div className="glass-card rounded-[2rem] overflow-hidden border border-white/40">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="bg-brand-dark/5 text-[10px] uppercase font-black tracking-widest text-brand-dark/70 border-b border-brand-dark/10">
+                                                    <th className="p-4 pl-6 w-16 text-center">POS</th>
+                                                    <th className="p-4">Atleta</th>
+                                                    <th className="p-4 pr-6 text-right">Pts</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="text-sm">
+                                                {dataLoading ? <tr><td colSpan="3"><Loader/></td></tr> : 
+                                                    [...rankingList].sort((a,b) => (b.Puntos || 0) - (a.Puntos || 0)).map((r, idx) => (
+                                                        <tr key={idx} className={`border-b border-white/30 transition-colors ${idx === 0 ? 'bg-yellow-500/20' : 'hover:bg-white/50'}`}>
+                                                            <td className="p-4 pl-6 text-center font-black text-xl text-brand-dark/40">#{idx + 1}</td>
+                                                            <td className="p-4 font-black uppercase">{r.Nombre || r.Nombres} {idx===0 && '🏆'}</td>
+                                                            <td className="p-4 pr-6 text-right font-black text-xl text-green-700">{r.Puntos || 0}</td>
+                                                        </tr>
+                                                    ))
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {currentView === 'admin' && user?.role === 'admin' && (
+                                <div className="space-y-6">
+                                    <div className="px-2"><h2 className="text-4xl font-black uppercase leading-none mt-1">Panel Admin</h2></div>
+                                    <div className="flex gap-2 overflow-x-auto hide-scroll px-2 pb-2">
+                                        {['atletas', 'blog', 'retos'].map(tab => (
+                                            <button key={tab} onClick={() => setAdminTab(tab)} className={`px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${adminTab === tab ? 'bg-brand-dark text-brand-bg1 shadow-lg' : 'glass-card text-brand-dark hover:bg-white'}`}>{tab}</button>
+                                        ))}
+                                    </div>
+                                    {errorMsg && <div className="bg-red-500/10 text-red-700 p-3 rounded-xl text-sm font-bold text-center border border-red-500/20">{errorMsg}</div>}
+                                    {successMsg && <div className="bg-green-500/10 text-green-700 p-3 rounded-xl text-sm font-bold text-center border border-green-500/20">{successMsg}</div>}
+
+                                    {adminTab === 'atletas' && (
+                                        dataLoading ? <div className="flex justify-center"><div className="w-10 h-10 border-4 border-brand-dark border-t-transparent rounded-full animate-spin"></div></div> : (
+                                            ['Aspirante', 'Activo', 'Inactivo'].map((categoria) => {
+                                                const atletas = usersList.filter(u => String(u.Estado || '').trim().toLowerCase() === categoria.toLowerCase() || (categoria==='Aspirante' && !String(u.Estado || '').trim()));
+                                                if(atletas.length === 0) return null;
+                                                return (
+                                                    <div key={categoria} className="glass-card rounded-[2rem] overflow-hidden mb-6 border border-white/40">
+                                                        <div className={`p-4 font-black uppercase text-sm flex justify-between items-center ${categoria==='Activo'?'bg-green-500/10 text-green-900':categoria==='Aspirante'?'bg-yellow-500/10 text-yellow-900':'bg-red-500/10 text-red-900'}`}>
+                                                            <span>{categoria}s</span><span className="bg-white/50 px-2 py-1 rounded-full text-xs shadow-sm">{atletas.length}</span>
+                                                        </div>
+                                                        <div className="overflow-x-auto p-2">
+                                                            <table className="w-full text-left border-collapse whitespace-nowrap">
+                                                                <tbody className="text-sm">
+                                                                    {atletas.map((u, idx) => (
+                                                                        <tr key={idx} className="border-b border-brand-dark/5 hover:bg-white/30 transition-colors">
+                                                                            <td className="p-3">
+                                                                                <p className="font-black text-brand-dark">{u.Nombres || u.Nombre} {u.Apellidos}</p>
+                                                                                <p className="text-[10px] text-brand-dark/50 mb-1">{u.Correo}</p>
+                                                                                {getDiasBadge(u)}
+                                                                            </td>
+                                                                            <td className="p-3 font-bold text-xs">{u.Plan || '-'}</td>
+                                                                            <td className="p-3 text-right"><button onClick={() => openEditModal(u)} className="bg-brand-dark text-brand-bg1 px-4 py-2 rounded-xl text-xs font-black uppercase shadow-md hover:scale-105">Editar</button></td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )
+                                    )}
+
+                                    {adminTab === 'blog' && (
+                                        <div className="glass-card p-6 rounded-[2rem] border border-white/40">
+                                            <h3 className="text-xl font-black mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5"/> Publicar Noticia</h3>
+                                            <form onSubmit={handleAdminAddBlog} className="space-y-4">
+                                                <div><label className="block text-[10px] font-black uppercase mb-1">Título</label><input name="titulo" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold" /></div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div><label className="block text-[10px] font-black uppercase mb-1">Etiqueta (Ej: Evento)</label><input name="etiqueta" required className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none" /></div>
+                                                    <div><label className="block text-[10px] font-black uppercase mb-1">Autor</label><input name="autor" className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none" placeholder="Elements" /></div>
+                                                </div>
+                                                <div><label className="block text-[10px] font-black uppercase mb-1">Resumen</label><textarea name="descCorta" required rows="2" className="w-full p-3.5 rounded-xl bg-white/50 outline-none font-medium resize-none" /></div>
+                                                <div><label className="block text-[10px] font-black uppercase mb-1">Contenido Completo</label><textarea name="contenido" required rows="4" className="w-full p-3.5 rounded-xl bg-white/50 outline-none font-medium resize-none" /></div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black uppercase mb-1 text-brand-dark/80">Subir Imagen a Drive</label>
+                                                    <div className="relative w-full p-4 rounded-xl bg-white/50 border-2 border-dashed border-brand-dark/30 hover:border-brand-dark transition-colors flex items-center justify-center gap-2 font-black cursor-pointer uppercase text-xs tracking-wider">
+                                                        <ImageIcon className="w-5 h-5" /> Escoger Foto
+                                                        <input type="file" name="imagen" accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                                    </div>
+                                                </div>
+                                                <button type="submit" disabled={loading} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black uppercase mt-4 hover:scale-[1.02] shadow-xl">{loading ? 'Subiendo...' : 'Publicar Noticia'}</button>
+                                            </form>
+                                        </div>
+                                    )}
+
+                                    {adminTab === 'retos' && (
+                                        <div className="glass-card p-6 rounded-[2rem] border border-white/40">
+                                            <h3 className="text-xl font-black mb-4 flex items-center gap-2"><Target className="w-5 h-5"/> Crear Reto Social</h3>
+                                            <form onSubmit={handleAdminAddReto} className="space-y-4">
+                                                <div><label className="block text-[10px] font-black uppercase mb-1">Título</label><input name="titulo" required className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none" placeholder="Foto Entrenando" /></div>
+                                                <div><label className="block text-[10px] font-black uppercase mb-1">Descripción</label><textarea name="descripcion" required rows="2" className="w-full p-3.5 rounded-xl bg-white/50 font-medium outline-none resize-none" /></div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-[10px] font-black uppercase mb-1">Red Social</label>
+                                                        <select name="redSocial" className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none">
+                                                            <option>Instagram</option><option>Facebook</option><option>WhatsApp</option><option>X</option>
+                                                        </select>
+                                                    </div>
+                                                    <div><label className="block text-[10px] font-black uppercase mb-1">Puntos</label><input type="number" name="puntos" required className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none" placeholder="10" /></div>
+                                                </div>
+                                                <button type="submit" disabled={loading} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black uppercase mt-4 hover:scale-[1.02] shadow-xl">{loading ? 'Procesando...' : 'Activar Reto'}</button>
+                                            </form>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                    )}
 
-            {/* PANEL DE ADMINISTRADOR */}
-            {currentView === 'admin' && user?.role === 'admin' && (
-              <div className="space-y-6">
-                <h2 className={`text-3xl font-black ${colors.textDark} uppercase flex items-center`}><Users className="mr-3 w-8 h-8"/> Gestión de Atletas</h2>
-                
-                <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-[#2a241f]/10">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className={`${colors.accent} text-[#e5d3bd] uppercase text-sm`}>
-                          <th className="p-4 font-semibold">Nombre</th>
-                          <th className="p-4 font-semibold">Correo</th>
-                          <th className="p-4 font-semibold">Plan</th>
-                          <th className="p-4 font-semibold">Estado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {usersList.length === 0 ? (
-                          <tr><td colSpan="4" className="p-4 text-center text-gray-500">No hay atletas registrados aún.</td></tr>
-                        ) : (
-                          usersList.map((u, idx) => (
-                            <tr key={idx} className="border-b hover:bg-[#f0e3d1]/50 transition-colors">
-                              <td className="p-4 font-bold ${colors.textDark}">{u.Nombre}</td>
-                              <td className="p-4 text-gray-600">{u.Correo}</td>
-                              <td className="p-4"><span className="bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded font-bold">{u.Plan || 'N/A'}</span></td>
-                              <td className="p-4">
-                                <span className={`text-xs px-2 py-1 rounded font-bold ${u.Estado === 'Activo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                  {u.Estado || 'N/A'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="p-4 bg-gray-50 text-xs text-gray-500 border-t">
-                    <p>Nota: Para editar planes, eliminar usuarios o agregar videos y blog, debes hacerlo directamente en la <b>Hoja de Google Sheets</b>. Los cambios se reflejarán aquí automáticamente.</p>
-                  </div>
+                    {user && <BottomNav />}
+
+                    {/* MODAL EDICIÓN ADMIN */}
+                    {editingUser && (
+                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in">
+                            <div className="bg-[#f0e3d1] w-full max-w-md rounded-[2.5rem] p-6 shadow-2xl relative animate-zoom-in max-h-[90vh] overflow-y-auto hide-scroll border border-white/20">
+                                <h3 className="text-2xl font-black uppercase mb-1 text-center text-brand-dark">Editar Atleta</h3>
+                                <p className="font-bold text-brand-dark/60 mb-6 text-center">{editingUser.Nombres || editingUser.Nombre} {editingUser.Apellidos}</p>
+                                
+                                <form onSubmit={handleAdminUpdateUser} className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Nombres</label><input name="nombres" defaultValue={editingUser.Nombres} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                        <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Apellidos</label><input name="apellidos" defaultValue={editingUser.Apellidos} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Cédula</label><input name="cedula" defaultValue={editingUser.Cedula} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                        <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Teléfono</label><input name="telefono" defaultValue={editingUser.Telefono} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                    </div>
+                                    
+                                    <div className="p-4 bg-white/40 rounded-2xl border border-white/60 space-y-4 mt-2">
+                                        <div className="flex gap-2">
+                                            <button type="button" onClick={()=>setPlanTypeSelection('elementa')} className={`flex-1 py-2 rounded-lg text-xs font-black uppercase transition-colors ${planTypeSelection==='elementa' ? 'bg-brand-dark text-brand-bg1' : 'bg-white/50 text-brand-dark/50'}`}>Elementa</button>
+                                            <button type="button" onClick={()=>setPlanTypeSelection('antiguos')} className={`flex-1 py-2 rounded-lg text-xs font-black uppercase transition-colors ${planTypeSelection==='antiguos' ? 'bg-brand-dark text-brand-bg1' : 'bg-white/50 text-brand-dark/50'}`}>Antiguos</button>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Plan</label>
+                                            <select name="plan" value={editingUser.Plan || ''} onChange={(e) => {
+                                                const np = e.target.value;
+                                                setEditingUser({...editingUser, Plan: np, 'Fecha de Caducidad': calculateAutoExpiry(editingUser['Fecha Ingreso'], np, planTypeSelection)});
+                                            }} className="w-full p-3 rounded-xl bg-white font-bold outline-none shadow-sm text-brand-dark">
+                                                <option value="">Seleccionar plan...</option>
+                                                {planesList[planTypeSelection]?.map((p, i) => <option key={i} value={p.plan}>{p.plan} - ${p.costo}</option>)}
+                                            </select>
+                                        </div>
+
+                                        {String(editingUser.Plan || '').includes('Parejas') && (
+                                            <div className="animate-fade-in">
+                                                <label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Vincular Atleta</label>
+                                                <select name="pareja" className="w-full p-3 rounded-xl bg-white font-bold outline-none border-2 border-brand-dark text-brand-dark">
+                                                    <option value="">No vincular a nadie</option>
+                                                    {usersList.filter(u => u.Correo !== editingUser.Correo).map((u, i) => <option key={i} value={u.Correo}>{u.Nombres || u.Nombre} - {u.Correo}</option>)}
+                                                </select>
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Ingreso</label><input type="date" name="ingreso" value={editingUser['Fecha Ingreso']} onChange={(e) => setEditingUser({...editingUser, 'Fecha Ingreso': e.target.value, 'Fecha de Caducidad': calculateAutoExpiry(e.target.value, editingUser.Plan, planTypeSelection)})} className="w-full p-3 rounded-xl bg-white font-bold text-xs shadow-sm text-brand-dark" /></div>
+                                            
+                                            {String(editingUser.Plan || '').includes('12 Clases') ? (
+                                                <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Clases Restantes</label><input type="number" name="clases" defaultValue={editingUser['Días Restantes'] || 12} className="w-full p-3 rounded-xl bg-white font-black text-brand-dark border-2 border-brand-dark text-center shadow-sm" /></div>
+                                            ) : (
+                                                <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Caducidad</label><input type="date" name="caducidad" value={editingUser['Fecha de Caducidad']} onChange={(e) => setEditingUser({...editingUser, 'Fecha de Caducidad': e.target.value})} className="w-full p-3 rounded-xl bg-white font-bold text-xs shadow-sm text-brand-dark" /></div>
+                                            )}
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Estado</label>
+                                            <select name="estado" defaultValue={editingUser.Estado} className="w-full p-3 rounded-xl bg-white font-black uppercase text-center shadow-sm text-brand-dark">
+                                                <option value="Activo">Activo</option><option value="Inactivo">Inactivo</option><option value="Aspirante">Aspirante</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-3 mt-8">
+                                        <button type="button" onClick={() => setEditingUser(null)} className="flex-1 bg-white/60 p-4 rounded-xl font-black uppercase text-brand-dark/70 hover:bg-white transition-colors">Cancelar</button>
+                                        <button type="submit" disabled={loading} className="flex-1 bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black uppercase hover:scale-105 shadow-xl transition-transform">{loading ? '...' : 'Guardar'}</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL DETALLE DE BLOG */}
+                    {selectedPost && (
+                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-0 sm:p-6 modal-overlay animate-fade-in" onClick={() => setSelectedPost(null)}>
+                            <div className="bg-brand-bg1 w-full h-full sm:max-h-[90vh] sm:max-w-4xl sm:rounded-[2.5rem] overflow-hidden shadow-2xl relative animate-zoom-in flex flex-col border border-white/10" onClick={e => e.stopPropagation()}>
+                                {/* AQUI ESTABA EL ERROR DE XIcon. Ahora es X */}
+                                <button onClick={() => setSelectedPost(null)} className="absolute top-4 right-4 z-30 bg-black/40 backdrop-blur-md text-white p-2 rounded-full shadow-lg hover:bg-black transition-colors"><X className="w-6 h-6" /></button>
+                                
+                                <div className="flex-1 overflow-y-auto hide-scroll bg-brand-bg1">
+                                    {selectedPost.cleanImg && (
+                                        <div className="w-full relative shadow-md">
+                                            <img src={selectedPost.cleanImg} className="w-full h-auto object-cover" alt="Detalle" />
+                                        </div>
+                                    )}
+                                    <div className={`p-6 sm:p-12 ${!selectedPost.cleanImg ? 'pt-20' : ''}`}>
+                                        <div className="flex gap-3 mb-5">
+                                            <span className="bg-brand-dark text-brand-bg1 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">{selectedPost.Etiqueta || 'Novedad'}</span>
+                                            <span className="text-brand-dark/60 text-xs font-bold uppercase py-1.5">{selectedPost.Fecha}</span>
+                                        </div>
+                                        <h2 className="text-4xl sm:text-5xl font-black text-brand-dark leading-tight mb-8 drop-shadow-sm">{selectedPost.Titulo}</h2>
+                                        <div className="text-brand-dark/90 font-medium leading-relaxed whitespace-pre-wrap text-base sm:text-lg">
+                                            {selectedPost.Contenido || selectedPost.Descripcion}
+                                        </div>
+                                        <div className="mt-12 pt-6 border-t border-brand-dark/10 flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-brand-dark rounded-full flex items-center justify-center text-brand-bg1 font-black shadow-lg text-xl">{selectedPost.Autor ? selectedPost.Autor.charAt(0) : 'E'}</div>
+                                            <div><p className="text-[10px] uppercase font-black text-brand-dark/50 tracking-wider">Escrito por</p><p className="font-black text-lg">{selectedPost.Autor || 'Equipo Elements'}</p></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL REPRODUCTOR DE VIDEO (FALTANTE) */}
+                    {selectedVideo && (
+                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in" onClick={() => setSelectedVideo(null)}>
+                            <div className="bg-black w-full max-w-4xl rounded-2xl overflow-hidden shadow-2xl relative aspect-video" onClick={e => e.stopPropagation()}>
+                                <button onClick={() => setSelectedVideo(null)} className="absolute top-4 right-4 z-30 bg-black/50 text-white p-2 rounded-full hover:bg-black transition-colors"><X className="w-6 h-6" /></button>
+                                {selectedVideo.type === 'youtube' && (
+                                    <iframe src={`https://www.youtube.com/embed/${selectedVideo.id}?autoplay=1`} className="w-full h-full border-0" allow="autoplay; fullscreen" title="Video Player"></iframe>
+                                )}
+                                {selectedVideo.type === 'drive' && (
+                                    <iframe src={`https://drive.google.com/file/d/${selectedVideo.id}/preview`} className="w-full h-full border-0" allow="autoplay; fullscreen" title="Drive Player"></iframe>
+                                )}
+                                {!selectedVideo.type && (
+                                    <div className="w-full h-full flex items-center justify-center text-white/50 font-bold">El video no está disponible o la URL no es válida.</div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* POPUP DE RESTRICCIÓN */}
+                    {restrictedPopup && (
+                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in" onClick={() => setRestrictedPopup(false)}>
+                            <div className="bg-[#f0e3d1] w-full max-w-sm rounded-[2rem] p-8 text-center shadow-2xl relative animate-zoom-in border border-brand-dark/20" onClick={e => e.stopPropagation()}>
+                                <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner"><Lock className="w-10 h-10 text-red-600" /></div>
+                                <h3 className="text-2xl font-black uppercase mb-3 text-brand-dark">Acceso Restringido</h3>
+                                <p className="font-medium text-brand-dark/80 mb-8 leading-relaxed text-sm">Tu cuenta está actualmente en estado <strong className="text-red-700 uppercase">INACTIVO / ASPIRANTE</strong>.<br/><br/>Para poder acceder a los videos y sumar puntos en el ranking, debes renovar tu suscripción en recepción.</p>
+                                <button onClick={() => setRestrictedPopup(false)} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black text-lg hover:scale-[1.02] active:scale-95 transition-transform shadow-lg">Entendido, regresar</button>
+                            </div>
+                        </div>
+                    )}
                 </div>
-              </div>
-            )}
-
-          </>
-        )}
-      </div>
-    </div>
-  );
+            </div>
+        </div>
+    );
 }
