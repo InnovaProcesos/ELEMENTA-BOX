@@ -16,14 +16,14 @@
                 extend: {
                     colors: { brand: { bg1: '#e5d3bd', bg2: '#d4bca0', dark: '#2a241f', surface: 'rgba(255, 255, 255, 0.45)' } },
                     animation: {
-                        'fade-in': 'fadeIn 0.4s ease-out forwards',
-                        'slide-up': 'slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-                        'zoom-in': 'zoomIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'fade-in': 'fadeIn 0.3s ease-out forwards',
+                        'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'zoom-in': 'zoomIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
                     },
                     keyframes: {
                         fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
                         slideUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
-                        zoomIn: { '0%': { opacity: '0', transform: 'scale(0.95)' }, '100%': { opacity: '1', transform: 'scale(1)' } }
+                        zoomIn: { '0%': { opacity: '0', transform: 'scale(0.95) translateY(10px)' }, '100%': { opacity: '1', transform: 'scale(1) translateY(0)' } }
                     }
                 }
             }
@@ -35,7 +35,8 @@
         ::-webkit-scrollbar-thumb { background: rgba(42, 36, 31, 0.3); border-radius: 10px; }
         body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
         .glass-card { background: rgba(255, 255, 255, 0.5); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 10px 30px -10px rgba(0,0,0,0.1); }
-        .modal-overlay { background: rgba(42, 36, 31, 0.8); backdrop-filter: blur(5px); }
+        .modal-overlay { background: rgba(20, 17, 14, 0.9); backdrop-filter: blur(8px); }
+        .hide-scroll::-webkit-scrollbar { display: none; }
     </style>
 </head>
 <body class="bg-gradient-to-br from-brand-bg1 to-brand-bg2 min-h-screen text-brand-dark font-sans selection:bg-brand-dark selection:text-white">
@@ -57,46 +58,36 @@
         const ChevronDown = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>;
         const ChevronUp = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>;
         const XIcon = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+        const Trophy = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>;
+        const AlertCircle = ({className}) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>;
 
         // --- CONFIGURACIÓN ---
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx1q7_Mxg8fdtxlz-_whq6bGc8QbqJwTaaEkgyrGgMbnwPe8sHfNkShZgUQnTKWUT99/exec"; 
         const API_SECRET = "ElementsBox_Seguridad_2026";
 
         // --- UTILIDADES GLOBALES ---
-        // Normaliza las llaves de los objetos removiendo espacios y saltos de línea molestos
         const normalizeKeys = (dataArray) => {
             return dataArray.map(obj => {
                 const newObj = {};
-                for (let key in obj) {
-                    newObj[key.trim()] = obj[key];
-                }
+                for (let key in obj) newObj[key.trim()] = obj[key];
                 return newObj;
             });
         };
 
-        // Identifica y extrae ID de Drive o Youtube
         const getVideoData = (url) => {
             if (!url) return { type: null, id: null };
-            
-            // Regex para YouTube
-            const ytRegExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-            const ytMatch = url.match(ytRegExp);
+            const ytMatch = url.match(/^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
             if (ytMatch && ytMatch[2].length === 11) return { type: 'youtube', id: ytMatch[2] };
-
-            // Regex para Google Drive
-            const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+            const driveMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
             if (driveMatch) return { type: 'drive', id: driveMatch[1] };
-
             return { type: null, id: null };
         };
 
-        // Convierte un enlace de Drive normal a un enlace de imagen directo
+        // Extrae imágenes de Drive con el endpoint robusto lh3
         const normalizeImageUrl = (url) => {
             if (!url) return '';
-            const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-            if (driveMatch) {
-                return `https://drive.google.com/uc?export=view&id=${driveMatch[1]}`;
-            }
+            const driveMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+            if (driveMatch) return `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
             return url;
         };
 
@@ -108,17 +99,18 @@
             const [dataLoading, setDataLoading] = useState(false);
             const [errorMsg, setErrorMsg] = useState('');
 
-            // Datos
             const [videos, setVideos] = useState([]);
             const [blogPosts, setBlogPosts] = useState([]);
             const [usersList, setUsersList] = useState([]);
+            const [rankingList, setRankingList] = useState([]);
 
-            // Estados UI Interactivos
+            // Estados Modales Interfaz
             const [searchTerm, setSearchTerm] = useState('');
             const [expandedCategories, setExpandedCategories] = useState({});
-            const [selectedPost, setSelectedPost] = useState(null); // Para el Modal del Blog
+            const [selectedPost, setSelectedPost] = useState(null); 
+            const [selectedVideo, setSelectedVideo] = useState(null); 
+            const [restrictedPopup, setRestrictedPopup] = useState(false);
 
-            // PERSISTENCIA
             useEffect(() => {
                 const sessionUser = localStorage.getItem('elementsSession');
                 if(sessionUser) {
@@ -147,11 +139,19 @@
                 setErrorMsg('');
                 setLoading(true);
                 
-                const email = e.target.email.value;
-                const password = e.target.password.value;
-                const name = action === 'register' ? e.target.name.value : null;
+                let payload = { email: e.target.email.value, password: e.target.password.value };
+                
+                if (action === 'register') {
+                    payload = {
+                        ...payload,
+                        nombres: e.target.nombres.value,
+                        apellidos: e.target.apellidos.value,
+                        telefono: e.target.telefono.value,
+                        fechaNac: e.target.fechaNac.value
+                    };
+                }
 
-                const res = await apiCall(action, { name, email, password });
+                const res = await apiCall(action, payload);
                 
                 if (res.status === 'success') {
                     setUser(res.user);
@@ -170,23 +170,35 @@
                 localStorage.removeItem('elementsSession'); 
             };
 
-            const fetchData = async (role) => {
-                setDataLoading(true);
-                const resVideos = await apiCall('getVideos', {});
-                if (resVideos.status === 'success') {
-                    // Normalizamos las llaves para evitar el error de los espacios
-                    const cleanVideos = normalizeKeys(resVideos.data);
-                    setVideos(cleanVideos);
-                    
-                    // Abrir la primera categoría por defecto
-                    if(cleanVideos.length > 0) {
-                        const firstCat = cleanVideos[0].Categoria || 'General';
-                        setExpandedCategories({ [firstCat]: true });
+            const handleNavigation = (view) => {
+                // Control de Accesos
+                if (['academy', 'ranking'].includes(view)) {
+                    if (user.role !== 'admin' && user.status !== 'Activo') {
+                        setRestrictedPopup(true);
+                        return;
                     }
                 }
+                setCurrentView(view);
+                window.scrollTo(0, 0);
+            };
 
+            const fetchData = async (role) => {
+                setDataLoading(true);
+                
                 const resBlog = await apiCall('getBlog', {});
                 if (resBlog.status === 'success') setBlogPosts(normalizeKeys(resBlog.data));
+
+                if (role === 'admin' || user?.status === 'Activo') {
+                    const resVideos = await apiCall('getVideos', {});
+                    if (resVideos.status === 'success') {
+                        const cleanVideos = normalizeKeys(resVideos.data);
+                        setVideos(cleanVideos);
+                        if(cleanVideos.length > 0) setExpandedCategories({ [cleanVideos[0].Categoria || 'General']: true });
+                    }
+
+                    const resRanking = await apiCall('getRanking', {});
+                    if (resRanking.status === 'success') setRankingList(normalizeKeys(resRanking.data));
+                }
 
                 if (role === 'admin') {
                     const resUsers = await apiCall('getUsers', { role: 'admin' });
@@ -195,18 +207,11 @@
                 setDataLoading(false);
             };
 
-            // PROCESAMIENTO DE VIDEOS PARA LA VISTA ACADEMIA
             const groupedFilteredVideos = useMemo(() => {
                 const lowerSearch = searchTerm.toLowerCase();
-                
-                // 1. Filtrar por búsqueda
                 const filtered = videos.filter(v => {
-                    const nom = (v.Nombre || '').toLowerCase();
-                    const desc = (v.Descripcion || '').toLowerCase();
-                    return nom.includes(lowerSearch) || desc.includes(lowerSearch);
+                    return (v.Nombre || '').toLowerCase().includes(lowerSearch) || (v.Descripcion || '').toLowerCase().includes(lowerSearch);
                 });
-
-                // 2. Agrupar por categoría
                 return filtered.reduce((acc, v) => {
                     const cat = v.Categoria || 'General';
                     if (!acc[cat]) acc[cat] = [];
@@ -215,12 +220,9 @@
                 }, {});
             }, [videos, searchTerm]);
 
-            const toggleCategory = (cat) => {
-                setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
-            };
+            const toggleCategory = (cat) => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
 
-
-            // COMPONENTES UI REUTILIZABLES
+            // --- COMPONENTES ---
             const Loader = () => (
                 <div className="flex justify-center items-center py-12">
                     <div className="w-10 h-10 border-4 border-brand-dark border-t-transparent rounded-full animate-spin"></div>
@@ -228,41 +230,43 @@
             );
 
             const Topbar = () => (
-                <div className="sticky top-0 z-40 bg-brand-bg1/90 backdrop-blur-md px-6 py-4 flex justify-between items-center shadow-sm">
+                <div className="sticky top-0 z-30 bg-brand-bg1/90 backdrop-blur-md px-6 py-4 flex justify-between items-center shadow-sm">
                     <div className="flex items-center gap-2">
-                        <div className="bg-brand-dark p-2 rounded-lg">
-                            <Activity className="w-6 h-6 text-brand-bg1" />
-                        </div>
+                        <div className="bg-brand-dark p-2 rounded-lg"><Activity className="w-6 h-6 text-brand-bg1" /></div>
                         <span className="font-black text-xl tracking-widest uppercase">Elements</span>
                     </div>
                     {user && (
                         <button onClick={handleLogout} className="flex items-center gap-2 p-2 rounded-full hover:bg-black/5 transition-colors text-brand-dark/80 font-bold text-sm">
-                            <span className="hidden sm:inline">Cerrar Sesión</span>
-                            <LogOut className="w-5 h-5" />
+                            <span className="hidden sm:inline">Cerrar Sesión</span><LogOut className="w-5 h-5" />
                         </button>
                     )}
                 </div>
             );
 
             const BottomNav = () => (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-sm bg-brand-dark p-2 rounded-full shadow-2xl flex justify-between items-center z-40 border border-white/10">
-                    {['dashboard', 'academy', 'blog', ...(user?.role === 'admin' ? ['admin'] : [])].map(view => {
+                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-md bg-brand-dark p-2 rounded-full shadow-2xl flex justify-between items-center z-40 border border-white/10">
+                    {['dashboard', 'academy', 'ranking', 'blog'].map(view => {
                         const isApp = currentView === view;
-                        const icons = { dashboard: UserCircle, academy: VideoIcon, blog: BookOpen, admin: Users };
-                        const labels = { dashboard: 'Perfil', academy: 'Aprende', blog: 'Blog', admin: 'Admin' };
+                        const icons = { dashboard: UserCircle, academy: VideoIcon, ranking: Trophy, blog: BookOpen };
+                        const labels = { dashboard: 'Perfil', academy: 'Aprende', ranking: 'Ranking', blog: 'Blog' };
                         const Icon = icons[view];
 
                         return (
-                            <button key={view} onClick={() => setCurrentView(view)} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${isApp ? 'bg-brand-bg1 w-28' : 'text-white/50 hover:text-white w-14'}`}>
-                                <Icon className={`w-6 h-6 ${isApp ? 'text-brand-dark' : ''}`} />
-                                {isApp && <span className="ml-2 text-sm font-bold text-brand-dark animate-fade-in">{labels[view]}</span>}
+                            <button key={view} onClick={() => handleNavigation(view)} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${isApp ? 'bg-brand-bg1 w-28' : 'text-white/50 hover:text-white flex-1'}`}>
+                                <Icon className={`w-5 h-5 ${isApp ? 'text-brand-dark' : ''}`} />
+                                {isApp && <span className="ml-1.5 text-xs font-black text-brand-dark uppercase tracking-wider animate-fade-in">{labels[view]}</span>}
                             </button>
                         );
                     })}
+                    {user?.role === 'admin' && (
+                        <button onClick={() => handleNavigation('admin')} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${currentView === 'admin' ? 'bg-brand-bg1 w-28' : 'text-white/50 hover:text-white flex-1'}`}>
+                            <Users className={`w-5 h-5 ${currentView === 'admin' ? 'text-brand-dark' : ''}`} />
+                            {currentView === 'admin' && <span className="ml-1.5 text-xs font-black text-brand-dark uppercase tracking-wider animate-fade-in">Admin</span>}
+                        </button>
+                    )}
                 </div>
             );
 
-            // RENDER PRINCIPAL
             return (
                 <div className="relative font-sans pb-32">
                     {(user || currentView !== 'login') && <Topbar />}
@@ -271,41 +275,57 @@
                         
                         {/* --- LOGIN & REGISTRO --- */}
                         {!user && (currentView === 'login' || currentView === 'register') && (
-                            <div className="min-h-[85vh] flex flex-col items-center justify-center animate-slide-up">
+                            <div className="min-h-[85vh] flex flex-col items-center justify-center animate-slide-up py-10">
                                 <div className="mb-8 flex flex-col items-center">
-                                    <div className="w-24 h-24 rounded-3xl bg-brand-dark flex items-center justify-center shadow-2xl mb-4 rotate-3">
-                                        <Activity className="w-12 h-12 text-brand-bg1 -rotate-3" />
-                                    </div>
+                                    <div className="w-24 h-24 rounded-3xl bg-brand-dark flex items-center justify-center shadow-2xl mb-4 rotate-3"><Activity className="w-12 h-12 text-brand-bg1 -rotate-3" /></div>
                                     <h1 className="text-4xl font-black uppercase tracking-widest text-brand-dark drop-shadow-sm">Elements</h1>
                                     <h2 className="text-xl font-medium tracking-[0.4em] text-brand-dark/70">TRAINING BOX</h2>
                                 </div>
                                 
-                                <div className="glass-card p-8 rounded-[2rem] w-full max-w-md">
-                                    <h3 className="text-2xl font-black mb-6 text-center">{currentView === 'login' ? 'Bienvenido' : 'Únete al Box'}</h3>
-                                    {errorMsg && <div className="bg-red-500/10 text-red-700 p-3 rounded-xl mb-6 text-sm font-bold text-center">{errorMsg}</div>}
+                                <div className="glass-card p-6 sm:p-8 rounded-[2rem] w-full max-w-md">
+                                    <h3 className="text-2xl font-black mb-6 text-center">{currentView === 'login' ? 'Bienvenido' : 'Crear Cuenta'}</h3>
+                                    {errorMsg && <div className="bg-red-500/10 text-red-700 p-3 rounded-xl mb-6 text-sm font-bold text-center border border-red-500/20">{errorMsg}</div>}
                                     
                                     <form onSubmit={(e) => handleAuth(e, currentView)} className="space-y-4">
                                         {currentView === 'register' && (
-                                            <div>
-                                                <label className="block text-xs font-bold text-brand-dark/60 mb-1 ml-1 uppercase">Nombre</label>
-                                                <input type="text" name="name" required className="w-full p-4 rounded-xl bg-white/60 focus:bg-white outline-none transition-all" placeholder="Juan Pérez" />
-                                            </div>
+                                            <>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-brand-dark/60 mb-1 ml-1 uppercase">Nombres</label>
+                                                        <input type="text" name="nombres" required className="w-full p-3.5 rounded-xl bg-white/60 focus:bg-white outline-none transition-all text-sm font-bold" placeholder="Juan" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-brand-dark/60 mb-1 ml-1 uppercase">Apellidos</label>
+                                                        <input type="text" name="apellidos" required className="w-full p-3.5 rounded-xl bg-white/60 focus:bg-white outline-none transition-all text-sm font-bold" placeholder="Pérez" />
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-brand-dark/60 mb-1 ml-1 uppercase">Teléfono</label>
+                                                        <input type="tel" name="telefono" required className="w-full p-3.5 rounded-xl bg-white/60 focus:bg-white outline-none transition-all text-sm font-bold" placeholder="3001234567" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-brand-dark/60 mb-1 ml-1 uppercase">Nacimiento</label>
+                                                        <input type="date" name="fechaNac" required className="w-full p-3.5 rounded-xl bg-white/60 focus:bg-white outline-none transition-all text-sm font-bold text-brand-dark/80" />
+                                                    </div>
+                                                </div>
+                                            </>
                                         )}
                                         <div>
-                                            <label className="block text-xs font-bold text-brand-dark/60 mb-1 ml-1 uppercase">Correo</label>
-                                            <input type="email" name="email" required className="w-full p-4 rounded-xl bg-white/60 focus:bg-white outline-none transition-all" placeholder="tu@correo.com" />
+                                            <label className="block text-[10px] font-black text-brand-dark/60 mb-1 ml-1 uppercase">Correo Electrónico</label>
+                                            <input type="email" name="email" required className="w-full p-3.5 rounded-xl bg-white/60 focus:bg-white outline-none transition-all font-bold" placeholder="tu@correo.com" />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-bold text-brand-dark/60 mb-1 ml-1 uppercase">Contraseña</label>
-                                            <input type="password" name="password" required className="w-full p-4 rounded-xl bg-white/60 focus:bg-white outline-none transition-all" placeholder="••••••••" />
+                                            <label className="block text-[10px] font-black text-brand-dark/60 mb-1 ml-1 uppercase">Contraseña</label>
+                                            <input type="password" name="password" required className="w-full p-3.5 rounded-xl bg-white/60 focus:bg-white outline-none transition-all font-bold" placeholder="••••••••" />
                                         </div>
-                                        <button type="submit" disabled={loading} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-bold text-lg mt-4 hover:scale-[1.02] transition-all">
-                                            {loading ? 'Procesando...' : (currentView === 'login' ? 'Entrar' : 'Registrarme')}
+                                        <button type="submit" disabled={loading} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black text-lg mt-4 hover:scale-[1.02] active:scale-95 transition-all shadow-xl">
+                                            {loading ? 'Procesando...' : (currentView === 'login' ? 'Entrar al Box' : 'Registrarme')}
                                         </button>
                                     </form>
                                     <div className="mt-8 text-center">
-                                        <button onClick={() => setCurrentView(currentView === 'login' ? 'register' : 'login')} className="text-sm font-bold text-brand-dark/80 hover:text-brand-dark underline">
-                                            {currentView === 'login' ? 'No tengo cuenta, registrarme' : 'Ya tengo cuenta, iniciar sesión'}
+                                        <button onClick={() => setCurrentView(currentView === 'login' ? 'register' : 'login')} className="text-sm font-bold text-brand-dark/80 hover:text-brand-dark underline decoration-2 underline-offset-4">
+                                            {currentView === 'login' ? '¿Nuevo? Regístrate aquí' : 'Ya tengo cuenta, iniciar sesión'}
                                         </button>
                                     </div>
                                 </div>
@@ -320,32 +340,44 @@
                                     <div className="space-y-6">
                                         <div className="flex items-end justify-between px-2">
                                             <div>
-                                                <p className="text-sm font-bold text-brand-dark/50 uppercase tracking-wider">Perfil</p>
+                                                <p className="text-sm font-bold text-brand-dark/50 uppercase tracking-wider">Tu Perfil</p>
                                                 <h2 className="text-4xl font-black uppercase leading-none mt-1">{user.name.split(' ')[0]}</h2>
                                             </div>
-                                            <div className="w-14 h-14 bg-brand-dark text-brand-bg1 rounded-full flex items-center justify-center font-black text-2xl shadow-lg">
+                                            <div className="w-14 h-14 bg-brand-dark text-brand-bg1 rounded-full flex items-center justify-center font-black text-2xl shadow-lg ring-4 ring-white/30">
                                                 {user.name.charAt(0).toUpperCase()}
                                             </div>
                                         </div>
 
                                         <div className="glass-card rounded-[2rem] p-6 relative overflow-hidden">
                                             <div className="flex flex-col gap-4 relative z-10">
-                                                <div className="bg-white/50 p-4 rounded-2xl flex justify-between items-center">
+                                                <div className="bg-white/50 p-5 rounded-2xl flex justify-between items-center shadow-inner">
                                                     <div>
-                                                        <p className="text-xs font-bold text-brand-dark/50 uppercase">Plan Actual</p>
-                                                        <p className="text-xl font-black">{user.plan || 'N/A'}</p>
+                                                        <p className="text-[10px] font-black text-brand-dark/50 uppercase tracking-wider">Suscripción</p>
+                                                        <p className="text-2xl font-black uppercase">{user.plan || 'Ninguno'}</p>
                                                     </div>
-                                                    <div className={`px-4 py-2 rounded-full text-xs font-black uppercase shadow-md ${user.status === 'Activo' ? 'bg-green-600 text-white' : 'bg-brand-dark text-brand-bg1'}`}>
-                                                        {user.status || 'Activo'}
+                                                    <div className={`px-5 py-2.5 rounded-full text-xs font-black uppercase shadow-md ${user.status === 'Activo' ? 'bg-green-500 text-white' : (user.status === 'Aspirante' ? 'bg-yellow-500 text-white' : 'bg-red-500 text-white')}`}>
+                                                        {user.status || 'Aspirante'}
                                                     </div>
                                                 </div>
+                                                
+                                                {user.status !== 'Activo' && (
+                                                    <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl flex items-start gap-3">
+                                                        <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                                                        <p className="text-sm font-bold text-red-800">Tu cuenta no está activa. Renueva tu membresía en recepción para acceder a rutinas y rankings.</p>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
-                                        <div className="bg-brand-dark text-brand-bg1 rounded-[2rem] p-8 text-center relative overflow-hidden shadow-2xl cursor-pointer hover:scale-[1.02] transition-transform" onClick={() => setCurrentView('academy')}>
-                                            <Play className="w-12 h-12 mx-auto mb-4 opacity-80" />
-                                            <h3 className="text-2xl font-black uppercase mb-2">Academia</h3>
-                                            <p className="text-sm opacity-80">Domina nuevos movimientos y mejora tu técnica.</p>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="bg-brand-dark text-brand-bg1 rounded-[2rem] p-6 text-center shadow-xl cursor-pointer hover:scale-[1.02] transition-transform flex flex-col items-center justify-center" onClick={() => handleNavigation('academy')}>
+                                                <Play className="w-10 h-10 mb-3 opacity-80" />
+                                                <h3 className="font-black uppercase text-sm">Academia</h3>
+                                            </div>
+                                            <div className="bg-white/40 border border-white/60 text-brand-dark rounded-[2rem] p-6 text-center shadow-xl cursor-pointer hover:scale-[1.02] transition-transform flex flex-col items-center justify-center" onClick={() => handleNavigation('ranking')}>
+                                                <Trophy className="w-10 h-10 mb-3 opacity-80" />
+                                                <h3 className="font-black uppercase text-sm">Ranking</h3>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -355,17 +387,17 @@
                                     <div className="space-y-6">
                                         <div className="px-2">
                                             <h2 className="text-4xl font-black uppercase leading-none mt-1">Academia</h2>
+                                            <p className="text-sm font-bold text-brand-dark/50 mt-2">Domina tu técnica</p>
                                         </div>
 
-                                        {/* Buscador */}
                                         <div className="relative">
                                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-dark/50" />
                                             <input 
                                                 type="text" 
-                                                placeholder="Buscar por nombre o descripción..." 
+                                                placeholder="Buscar movimiento..." 
                                                 value={searchTerm}
                                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white/60 focus:bg-white border-2 border-transparent focus:border-brand-dark outline-none transition-all shadow-sm font-bold text-brand-dark"
+                                                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white/60 focus:bg-white outline-none transition-all shadow-inner font-bold text-brand-dark"
                                             />
                                         </div>
 
@@ -379,48 +411,30 @@
                                                 <div className="space-y-4">
                                                     {Object.keys(groupedFilteredVideos).map((category, catIdx) => (
                                                         <div key={catIdx} className="glass-card rounded-[1.5rem] overflow-hidden">
-                                                            
-                                                            {/* Cabecera del Acordeón */}
-                                                            <button 
-                                                                onClick={() => toggleCategory(category)}
-                                                                className="w-full p-5 flex justify-between items-center bg-white/20 hover:bg-white/40 transition-colors"
-                                                            >
+                                                            <button onClick={() => toggleCategory(category)} className="w-full p-5 flex justify-between items-center hover:bg-white/40 transition-colors">
                                                                 <div className="flex items-center gap-3">
-                                                                    <div className="bg-brand-dark text-brand-bg1 w-8 h-8 rounded-full flex items-center justify-center font-black text-sm">
+                                                                    <div className="bg-brand-dark text-brand-bg1 w-7 h-7 rounded-full flex items-center justify-center font-black text-xs shadow-inner">
                                                                         {groupedFilteredVideos[category].length}
                                                                     </div>
-                                                                    <h3 className="font-black text-xl uppercase tracking-wider">{category}</h3>
+                                                                    <h3 className="font-black text-lg uppercase tracking-wider">{category}</h3>
                                                                 </div>
-                                                                {expandedCategories[category] ? <ChevronUp className="w-6 h-6"/> : <ChevronDown className="w-6 h-6"/>}
+                                                                {expandedCategories[category] ? <ChevronUp className="w-5 h-5 opacity-50"/> : <ChevronDown className="w-5 h-5 opacity-50"/>}
                                                             </button>
 
-                                                            {/* Contenido (Grilla de Videos) */}
                                                             {expandedCategories[category] && (
-                                                                <div className="p-4 grid md:grid-cols-2 gap-4 bg-black/5 animate-fade-in">
+                                                                <div className="p-4 grid grid-cols-1 gap-4 bg-black/5 animate-fade-in border-t border-white/20">
                                                                     {groupedFilteredVideos[category].map((vid, vIdx) => {
                                                                         const url = vid.URL || '';
                                                                         const videoInfo = getVideoData(url);
-
+                                                                        
                                                                         return (
-                                                                            <div key={vIdx} className="bg-white rounded-[1rem] overflow-hidden shadow-md flex flex-col group">
-                                                                                <div className="relative w-full pt-[56.25%] bg-brand-dark/10">
-                                                                                    {videoInfo.type === 'youtube' && (
-                                                                                        <iframe className="absolute top-0 left-0 w-full h-full" src={`https://www.youtube.com/embed/${videoInfo.id}`} allowFullScreen></iframe>
-                                                                                    )}
-                                                                                    {videoInfo.type === 'drive' && (
-                                                                                        // Google Drive Preview Iframe
-                                                                                        <iframe className="absolute top-0 left-0 w-full h-full" src={`https://drive.google.com/file/d/${videoInfo.id}/preview`} allowFullScreen></iframe>
-                                                                                    )}
-                                                                                    {!videoInfo.type && (
-                                                                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-brand-dark/40">
-                                                                                            <VideoIcon className="w-8 h-8 mb-2" />
-                                                                                            <span className="text-xs font-bold">Enlace no soportado</span>
-                                                                                        </div>
-                                                                                    )}
+                                                                            <div key={vIdx} onClick={() => setSelectedVideo(videoInfo)} className="bg-white rounded-2xl p-4 flex items-center gap-4 shadow-sm cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all">
+                                                                                <div className="w-16 h-16 shrink-0 bg-brand-dark/10 rounded-xl flex items-center justify-center relative overflow-hidden group">
+                                                                                    <Play className="w-6 h-6 text-brand-dark group-hover:scale-125 transition-transform" />
                                                                                 </div>
-                                                                                <div className="p-4 flex-1 flex flex-col">
-                                                                                    <h4 className="text-lg font-black leading-tight mb-1">{vid.Nombre}</h4>
-                                                                                    <p className="text-sm text-brand-dark/70 font-medium">{vid.Descripcion}</p>
+                                                                                <div>
+                                                                                    <h4 className="font-black text-lg leading-tight uppercase mb-1">{vid.Nombre}</h4>
+                                                                                    <p className="text-xs text-brand-dark/60 font-bold line-clamp-1">{vid.Descripcion}</p>
                                                                                 </div>
                                                                             </div>
                                                                         )
@@ -440,6 +454,7 @@
                                     <div className="space-y-6">
                                         <div className="px-2">
                                             <h2 className="text-4xl font-black uppercase leading-none mt-1">Blog Box</h2>
+                                            <p className="text-sm font-bold text-brand-dark/50 mt-2">Noticias y Comunidad</p>
                                         </div>
 
                                         {dataLoading ? <Loader /> : (
@@ -449,34 +464,27 @@
                                                     <p className="font-bold opacity-60">No hay publicaciones recientes.</p>
                                                 </div>
                                             ) : (
-                                                <div className="grid md:grid-cols-2 gap-6">
+                                                <div className="grid grid-cols-1 gap-8">
                                                     {blogPosts.map((post, idx) => {
                                                         const imgUrl = normalizeImageUrl(post.URL_Imagen);
-                                                        
                                                         return (
-                                                            <div key={idx} onClick={() => setSelectedPost({...post, cleanImg: imgUrl})} className="glass-card rounded-[2rem] overflow-hidden group hover:shadow-2xl transition-all duration-300 relative cursor-pointer">
+                                                            <div key={idx} onClick={() => setSelectedPost({...post, cleanImg: imgUrl})} className="glass-card rounded-[2rem] overflow-hidden group hover:shadow-2xl transition-all duration-300 relative cursor-pointer flex flex-col">
                                                                 {imgUrl && (
-                                                                    <div className="h-56 overflow-hidden relative">
-                                                                        <div className="absolute inset-0 bg-gradient-to-t from-brand-dark/90 via-brand-dark/30 to-transparent z-10"></div>
-                                                                        <img src={imgUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt={post.Titulo} />
-                                                                        
-                                                                        <div className="absolute bottom-4 left-5 right-5 z-20">
-                                                                            <span className="bg-brand-bg1 text-brand-dark px-3 py-1 rounded-full text-xs font-black shadow-lg mb-2 inline-block">
-                                                                                {post.Fecha || 'Novedad'}
-                                                                            </span>
-                                                                            <h3 className="text-xl font-black text-white leading-tight drop-shadow-md">{post.Titulo}</h3>
-                                                                        </div>
+                                                                    <div className="h-48 sm:h-64 w-full relative overflow-hidden">
+                                                                        <img src={imgUrl} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="News" />
                                                                     </div>
                                                                 )}
-                                                                {!imgUrl && (
-                                                                    <div className="p-6 bg-brand-dark text-white">
-                                                                        <h3 className="text-xl font-black leading-tight mb-2">{post.Titulo}</h3>
-                                                                        <span className="bg-brand-bg1 text-brand-dark px-3 py-1 rounded-full text-xs font-black">{post.Fecha}</span>
+                                                                <div className="p-6 bg-white/60 flex-1 flex flex-col">
+                                                                    <div className="flex justify-between items-start mb-3">
+                                                                        <span className="bg-brand-dark text-brand-bg1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">{post.Etiqueta || 'Novedad'}</span>
+                                                                        <span className="text-[10px] font-bold text-brand-dark/50 uppercase">{post.Fecha}</span>
                                                                     </div>
-                                                                )}
-                                                                <div className="p-5 bg-white/40">
-                                                                    <p className="font-medium text-brand-dark/80 line-clamp-2 text-sm">{post.Descripcion}</p>
-                                                                    <p className="text-xs font-black uppercase mt-3 text-brand-dark/50 flex items-center">Leer más <Play className="w-3 h-3 ml-1"/></p>
+                                                                    <h3 className="text-2xl font-black leading-tight mb-2">{post.Titulo}</h3>
+                                                                    <p className="font-medium text-brand-dark/70 text-sm mb-4 line-clamp-2">{post['Descripcion Corta'] || post.Descripcion}</p>
+                                                                    <div className="mt-auto flex justify-between items-center pt-4 border-t border-brand-dark/10">
+                                                                        <span className="text-xs font-bold text-brand-dark/60">{post.Autor || 'Elements'}</span>
+                                                                        <span className="text-xs font-black uppercase text-brand-dark flex items-center">Leer más <Play className="w-3 h-3 ml-1"/></span>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         )
@@ -487,75 +495,124 @@
                                     </div>
                                 )}
 
-                                {/* ADMIN */}
-                                {currentView === 'admin' && user?.role === 'admin' && (
+                                {/* RANKING */}
+                                {currentView === 'ranking' && (
                                     <div className="space-y-6">
                                         <div className="px-2">
-                                            <h2 className="text-4xl font-black uppercase leading-none mt-1">Gestión</h2>
+                                            <h2 className="text-4xl font-black uppercase leading-none mt-1">Leaderboard</h2>
+                                            <p className="text-sm font-bold text-brand-dark/50 mt-2">Puntuación Atletas Activos</p>
                                         </div>
 
                                         <div className="glass-card rounded-[2rem] overflow-hidden">
-                                            <div className="p-6 bg-white/40 border-b border-white/40 flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-brand-dark rounded-full flex justify-center items-center text-brand-bg1"><Users className="w-5 h-5"/></div>
-                                                <div>
-                                                    <h3 className="font-black text-xl">Atletas</h3>
-                                                    <p className="text-xs font-bold text-brand-dark/60">Total: {usersList.length}</p>
-                                                </div>
-                                            </div>
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full text-left border-collapse">
-                                                    <thead>
-                                                        <tr className="bg-brand-dark/5 text-xs uppercase font-bold text-brand-dark/60">
-                                                            <th className="p-4">Nombre</th>
-                                                            <th className="p-4">Plan</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="text-sm">
-                                                        {dataLoading ? <tr><td colSpan="2"><Loader/></td></tr> : 
-                                                        usersList.map((u, idx) => (
-                                                            <tr key={idx} className="border-b border-white/30">
-                                                                <td className="p-4">
-                                                                    <p className="font-black">{u.Nombre}</p>
-                                                                    <p className="text-xs text-brand-dark/50">{u.Correo}</p>
-                                                                </td>
-                                                                <td className="p-4 font-bold">{u.Plan || 'N/A'}</td>
+                                            <table className="w-full text-left border-collapse">
+                                                <thead>
+                                                    <tr className="bg-brand-dark text-brand-bg1 text-[10px] uppercase font-black tracking-widest">
+                                                        <th className="p-4 pl-6 w-16 text-center">POS</th>
+                                                        <th className="p-4">Atleta</th>
+                                                        <th className="p-4 pr-6 text-right">Pts</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="text-sm">
+                                                    {dataLoading ? <tr><td colSpan="3"><Loader/></td></tr> : 
+                                                    (rankingList.length === 0 ? (
+                                                        <tr><td colSpan="3" className="p-8 text-center text-brand-dark/50 font-bold">Aún no hay puntuaciones.</td></tr>
+                                                    ) : (
+                                                        [...rankingList].sort((a,b) => (b.Puntos || 0) - (a.Puntos || 0)).map((r, idx) => (
+                                                            <tr key={idx} className="border-b border-white/30 hover:bg-white/50 transition-colors">
+                                                                <td className="p-4 pl-6 text-center font-black text-xl text-brand-dark/40">{idx + 1}</td>
+                                                                <td className="p-4 font-black uppercase">{r.Nombre || r.Nombres}</td>
+                                                                <td className="p-4 pr-6 text-right font-black text-xl">{r.Puntos || 0}</td>
                                                             </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
+                                                        ))
+                                                    ))}
+                                                </tbody>
+                                            </table>
                                         </div>
                                     </div>
                                 )}
+
                             </div>
                         )}
 
+                        {/* NAVBAR INFERIOR */}
                         {user && <BottomNav />}
 
-                        {/* MODAL DEL BLOG (ZOOM) */}
+                        {/* --- MODALES PANTALLA COMPLETA --- */}
+
+                        {/* MODAL BLOG */}
                         {selectedPost && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay animate-fade-in" onClick={() => setSelectedPost(null)}>
-                                <div className="bg-brand-bg1 w-full max-w-lg rounded-[2rem] overflow-hidden shadow-2xl relative animate-zoom-in flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 modal-overlay animate-fade-in" onClick={() => setSelectedPost(null)}>
+                                <div className="bg-brand-bg1 w-full h-full max-h-[90vh] max-w-4xl rounded-[2rem] overflow-hidden shadow-2xl relative animate-zoom-in flex flex-col" onClick={e => e.stopPropagation()}>
                                     
-                                    <button onClick={() => setSelectedPost(null)} className="absolute top-4 right-4 z-20 bg-brand-dark text-white p-2 rounded-full shadow-lg hover:scale-110 transition-transform">
-                                        <XIcon className="w-5 h-5" />
+                                    <button onClick={() => setSelectedPost(null)} className="absolute top-4 right-4 z-20 bg-brand-bg1/80 backdrop-blur text-brand-dark p-2 rounded-full shadow-lg">
+                                        <XIcon className="w-6 h-6" />
                                     </button>
 
-                                    {selectedPost.cleanImg && (
-                                        <div className="w-full h-64 shrink-0 bg-black relative">
-                                            <img src={selectedPost.cleanImg} className="w-full h-full object-cover" alt="Detalle" />
-                                        </div>
-                                    )}
-                                    
-                                    <div className="p-8 overflow-y-auto">
-                                        <span className="bg-brand-dark text-brand-bg1 px-3 py-1 rounded-full text-xs font-black mb-4 inline-block tracking-widest uppercase">
-                                            {selectedPost.Fecha || 'Anuncio'}
-                                        </span>
-                                        <h2 className="text-3xl font-black text-brand-dark leading-tight mb-4">{selectedPost.Titulo}</h2>
-                                        <div className="text-brand-dark/80 font-medium leading-relaxed whitespace-pre-wrap">
-                                            {selectedPost.Descripcion}
+                                    <div className="flex-1 overflow-y-auto hide-scroll">
+                                        {selectedPost.cleanImg && (
+                                            <div className="w-full h-64 sm:h-80 shrink-0 bg-brand-dark relative">
+                                                <img src={selectedPost.cleanImg} className="w-full h-full object-cover" alt="Detalle" />
+                                            </div>
+                                        )}
+                                        <div className="p-6 sm:p-10">
+                                            <div className="flex gap-3 mb-4">
+                                                <span className="bg-brand-dark text-brand-bg1 px-3 py-1 rounded-full text-xs font-black uppercase">{selectedPost.Etiqueta || 'Novedad'}</span>
+                                                <span className="text-brand-dark/50 text-xs font-bold uppercase py-1">{selectedPost.Fecha}</span>
+                                            </div>
+                                            <h2 className="text-3xl sm:text-5xl font-black text-brand-dark leading-tight mb-6">{selectedPost.Titulo}</h2>
+                                            
+                                            <div className="prose prose-brand max-w-none text-brand-dark/90 font-medium leading-relaxed whitespace-pre-wrap text-base sm:text-lg">
+                                                {selectedPost.Contenido || selectedPost.Descripcion}
+                                            </div>
+                                            
+                                            <div className="mt-10 pt-6 border-t border-brand-dark/10 flex items-center gap-4">
+                                                <div className="w-10 h-10 bg-brand-dark rounded-full flex items-center justify-center text-brand-bg1 font-black">{selectedPost.Autor ? selectedPost.Autor.charAt(0) : 'E'}</div>
+                                                <div>
+                                                    <p className="text-[10px] uppercase font-black text-brand-dark/50">Escrito por</p>
+                                                    <p className="font-black">{selectedPost.Autor || 'Equipo Elements'}</p>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* MODAL VIDEO */}
+                        {selectedVideo && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 modal-overlay animate-fade-in" onClick={() => setSelectedVideo(null)}>
+                                <div className="bg-black w-full max-w-5xl aspect-video rounded-2xl sm:rounded-[2rem] overflow-hidden shadow-2xl relative animate-zoom-in" onClick={e => e.stopPropagation()}>
+                                    <button onClick={() => setSelectedVideo(null)} className="absolute -top-10 right-0 sm:top-4 sm:right-4 z-20 text-white p-2">
+                                        <XIcon className="w-8 h-8" />
+                                    </button>
+                                    
+                                    {selectedVideo.type === 'youtube' && (
+                                        <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${selectedVideo.id}?autoplay=1`} allow="autoplay; fullscreen" allowFullScreen></iframe>
+                                    )}
+                                    {selectedVideo.type === 'drive' && (
+                                        <iframe className="w-full h-full" src={`https://drive.google.com/file/d/${selectedVideo.id}/preview`} allow="autoplay; fullscreen" allowFullScreen></iframe>
+                                    )}
+                                    {!selectedVideo.type && (
+                                        <div className="w-full h-full flex items-center justify-center text-white/50 font-bold">Video no disponible</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* POPUP DE RESTRICCIÓN (ASPIRANTES/INACTIVOS) */}
+                        {restrictedPopup && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay animate-fade-in" onClick={() => setRestrictedPopup(false)}>
+                                <div className="bg-brand-bg1 w-full max-w-sm rounded-[2rem] p-8 text-center shadow-2xl relative animate-zoom-in border-4 border-brand-dark/10" onClick={e => e.stopPropagation()}>
+                                    <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                                        <Lock className="w-10 h-10 text-red-600" />
+                                    </div>
+                                    <h3 className="text-2xl font-black uppercase mb-3 text-brand-dark">Acceso Restringido</h3>
+                                    <p className="font-medium text-brand-dark/80 mb-8 leading-relaxed">
+                                        Para acceder a la academia de movimientos y ver el ranking, necesitas renovar o adquirir tu suscripción en recepción.
+                                    </p>
+                                    <button onClick={() => setRestrictedPopup(false)} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black text-lg hover:scale-[1.02] active:scale-95 transition-transform shadow-lg">
+                                        Entendido
+                                    </button>
                                 </div>
                             </div>
                         )}
