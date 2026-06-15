@@ -1,535 +1,681 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Play, BookOpen, Users, LogOut, UserCircle, Activity, 
-  Lock, Mail, Video, Search, ChevronDown, ChevronUp, X, 
-  Trophy, AlertCircle, Clock, Target, Image as ImageIcon 
-} from 'lucide-react';
-
-// --- CONFIGURACIÓN DE CONEXIÓN ---
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx1q7_Mxg8fdtxlz-_whq6bGc8QbqJwTaaEkgyrGgMbnwPe8sHfNkShZgUQnTKWUT99/exec"; 
-const API_SECRET = "ElementsBox_Seguridad_2026";
-
-// --- ESTILOS PERSONALIZADOS PARA REACT ---
-const customStyles = `
-  :root {
-      --color-brand-bg1: 229 211 189;
-      --color-brand-bg2: 212 188 160;
-      --color-brand-dark: 42 36 31;
-  }
-  .bg-brand-bg1 { background-color: rgb(var(--color-brand-bg1)); }
-  .bg-brand-dark { background-color: rgb(var(--color-brand-dark)); }
-  .text-brand-bg1 { color: rgb(var(--color-brand-bg1)); }
-  .text-brand-dark { color: rgb(var(--color-brand-dark)); }
-  .border-brand-dark { border-color: rgb(var(--color-brand-dark)); }
-  
-  .glass-card { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 15px 35px -5px rgba(0,0,0,0.15); }
-  .modal-overlay { background: rgba(10, 8, 7, 0.95); backdrop-filter: blur(10px); }
-  .hide-scroll::-webkit-scrollbar { display: none; }
-  
-  @keyframes blob {
-      0% { transform: translate(0px, 0px) scale(1); }
-      33% { transform: translate(30px, -50px) scale(1.1); }
-      66% { transform: translate(-20px, 20px) scale(0.9); }
-      100% { transform: translate(0px, 0px) scale(1); }
-  }
-  .animate-blob { animation: blob 10s infinite; }
-  .animation-delay-2000 { animation-delay: 2s; }
-  .animation-delay-4000 { animation-delay: 4s; }
-  
-  @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
-  .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-  
-  @keyframes slideUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
-  .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-  
-  @keyframes zoomIn { 0% { opacity: 0; transform: scale(0.95) translateY(10px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
-  .animate-zoom-in { animation: zoomIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-`;
-
-// --- UTILIDADES (Corregidas para evitar Crash) ---
-const normalizeKeys = (dataArray) => {
-    if (!Array.isArray(dataArray)) return [];
-    return dataArray.map(obj => { 
-        const newObj = {}; 
-        for (let key in obj) newObj[key.trim()] = obj[key]; 
-        return newObj; 
-    });
-};
-
-const getVideoData = (url) => {
-    if (!url) return { type: null, id: null };
-    const ytRegex = new RegExp("^.*(youtu\\.be\\/|v\\/|u\\/\\w\\/|embed\\/|watch\\?v=|\\&v=)([^#\\&\\?]*).*");
-    const ytMatch = url.match(ytRegex);
-    if (ytMatch && ytMatch[2].length === 11) return { type: 'youtube', id: ytMatch[2] };
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elements Box App</title>
     
-    const driveRegex = new RegExp("(?:\\/d\\/|id=)([a-zA-Z0-9_-]+)");
-    const driveMatch = url.match(driveRegex);
-    if (driveMatch) return { type: 'drive', id: driveMatch[1] };
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    return { type: null, id: null };
-};
+    <!-- LIBRERIA CONFETTI PARA LAS ANIMACIONES DE LOGROS -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body class="bg-[#E5D3BD]">
+    <div id="root"></div>
 
-const normalizeImageUrl = (url) => {
-    if (!url) return '';
-    const driveRegex = new RegExp("(?:\\/d\\/|id=)([a-zA-Z0-9_-]+)");
-    const driveMatch = url.match(driveRegex);
-    if (driveMatch) return `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
-    return url;
-};
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
 
-const formatearFecha = (fechaString) => {
-    if (!fechaString) return 'N/A';
-    const fecha = new Date(fechaString);
-    if(isNaN(fecha)) return fechaString;
-    return fecha.toLocaleDateString('es-CO');
-};
+        const Icons = {
+            Play: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>,
+            BookOpen: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
+            Users: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+            LogOut: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+            UserCircle: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>,
+            Activity: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
+            Lock: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+            Video: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>,
+            Search: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+            ChevronDown: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>,
+            ChevronUp: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>,
+            X: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+            Trophy: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>,
+            AlertCircle: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+            Clock: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+            Target: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+            Camera: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>,
+            Upload: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+            CheckCircle: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
+            Database: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>,
+            Info: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
+            Flame: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+        };
+        const { Play, BookOpen, Users, LogOut, UserCircle, Activity, Lock, Video, Search, ChevronDown, ChevronUp, X, Trophy, AlertCircle, Clock, Target, Camera, Upload, CheckCircle, Database, Info, Flame } = Icons;
 
-// Evita crash al parsear fechas en el panel de Admin
-const safeDateStr = (dateStr) => {
-    if(!dateStr) return '';
-    const d = new Date(dateStr);
-    return isNaN(d) ? '' : d.toISOString().split('T')[0];
-};
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx1q7_Mxg8fdtxlz-_whq6bGc8QbqJwTaaEkgyrGgMbnwPe8sHfNkShZgUQnTKWUT99/exec"; 
+        const API_SECRET = "ElementsBox_Seguridad_2026";
 
-const calcularDias = (fecha1, fecha2) => Math.floor((new Date(fecha1) - new Date(fecha2)) / 86400000);
+        const customStyles = `
+        :root { --color-brand-bg1: 229 211 189; --color-brand-bg2: 212 188 160; --color-brand-dark: 42 36 31; }
+        .bg-brand-bg1 { background-color: rgb(var(--color-brand-bg1)); }
+        .bg-brand-dark { background-color: rgb(var(--color-brand-dark)); }
+        .text-brand-bg1 { color: rgb(var(--color-brand-bg1)); }
+        .text-brand-dark { color: rgb(var(--color-brand-dark)); }
+        .border-brand-dark { border-color: rgb(var(--color-brand-dark)); }
+        .glass-card { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 15px 35px -5px rgba(0,0,0,0.15); }
+        .modal-overlay { background: rgba(10, 8, 7, 0.95); backdrop-filter: blur(10px); }
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        @keyframes blob { 0% { transform: translate(0px, 0px) scale(1); } 33% { transform: translate(30px, -50px) scale(1.1); } 66% { transform: translate(-20px, 20px) scale(0.9); } 100% { transform: translate(0px, 0px) scale(1); } }
+        .animate-blob { animation: blob 10s infinite; }
+        .animation-delay-2000 { animation-delay: 2s; } .animation-delay-4000 { animation-delay: 4s; }
+        @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } } .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes slideUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } } .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes zoomIn { 0% { opacity: 0; transform: scale(0.95) translateY(10px); } 100% { opacity: 1; transform: scale(1) translateY(0); } } .animate-zoom-in { animation: zoomIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        `;
 
-export default function App() {
-    const [user, setUser] = useState(null); 
-    const [currentView, setCurrentView] = useState('login'); 
-    const [loading, setLoading] = useState(false);
-    const [dataLoading, setDataLoading] = useState(false);
-    const [errorMsg, setErrorMsg] = useState('');
-    const [successMsg, setSuccessMsg] = useState('');
-
-    const [videos, setVideos] = useState([]);
-    const [blogPosts, setBlogPosts] = useState([]);
-    const [usersList, setUsersList] = useState([]);
-    const [rankingList, setRankingList] = useState([]);
-    const [retosList, setRetosList] = useState([]);
-    const [planesList, setPlanesList] = useState({ elementa: [], antiguos: [] });
-
-    const [searchTerm, setSearchTerm] = useState('');
-    const [expandedCategories, setExpandedCategories] = useState({});
-    const [selectedPost, setSelectedPost] = useState(null); 
-    const [selectedVideo, setSelectedVideo] = useState(null); 
-    const [restrictedPopup, setRestrictedPopup] = useState(false);
-
-    // Estados Admin
-    const [adminTab, setAdminTab] = useState('atletas'); 
-    const [editingUser, setEditingUser] = useState(null);
-    const [planTypeSelection, setPlanTypeSelection] = useState('elementa');
-
-    useEffect(() => {
-        const sessionUser = localStorage.getItem('elementsSession');
-        if(sessionUser) {
-            const parsedUser = JSON.parse(sessionUser);
-            setUser(parsedUser);
-            setCurrentView('dashboard');
-            fetchData(parsedUser.role, parsedUser.status);
-        }
-    }, []);
-
-    const apiCall = async (action, payload) => {
-        try {
-            const response = await fetch(GOOGLE_SCRIPT_URL, {
-                method: 'POST', 
-                headers: { 'Content-Type': 'text/plain' }, 
-                body: JSON.stringify({ action, payload, apiSecret: API_SECRET })
+        const normalizeKeys = (dataArray) => {
+            if (!Array.isArray(dataArray)) return [];
+            return dataArray.map(obj => { 
+                const newObj = {}; 
+                for (let key in obj) newObj[String(key).trim()] = obj[key]; 
+                return newObj; 
             });
-            return await response.json();
-        } catch (error) {
-            return { status: 'error', message: 'Error de conexión con el servidor.' };
-        }
-    };
-
-    const handleAuth = async (e, action) => {
-        e.preventDefault(); setErrorMsg(''); setLoading(true);
-        let payload = { email: e.target.email.value, password: e.target.password.value };
-        if (action === 'register') {
-            payload = {
-                ...payload, nombres: e.target.nombres.value, apellidos: e.target.apellidos.value, 
-                cedula: e.target.cedula.value, telefono: e.target.telefono.value, eps: e.target.eps.value, 
-                fechaNac: e.target.fechaNac.value, contactoEmergencia: e.target.contactoEmergencia.value, 
-                parentesco: e.target.parentesco.value
-            };
-        }
-        const res = await apiCall(action, payload);
-        if (res.status === 'success') {
-            setUser(res.user); 
-            localStorage.setItem('elementsSession', JSON.stringify(res.user)); 
-            setCurrentView('dashboard'); 
-            fetchData(res.user.role, res.user.status);
-        } else { 
-            setErrorMsg(res.message); 
-        }
-        setLoading(false);
-    };
-
-    const handleLogout = () => { 
-        setUser(null); 
-        setCurrentView('login'); 
-        localStorage.removeItem('elementsSession'); 
-    };
-
-    const handleNavigation = (view) => {
-        if (['academy', 'ranking'].includes(view)) {
-            if (user.role !== 'admin' && (user.status || '').trim().toLowerCase() !== 'activo') {
-                setRestrictedPopup(true); 
-                return;
-            }
-        }
-        setCurrentView(view); 
-        window.scrollTo(0, 0);
-    };
-
-    // Bloque Try-Catch para evitar carga infinita si Google rechaza algo
-    const fetchData = async (role, userStatus) => {
-        setDataLoading(true);
-        try {
-            const resBlog = await apiCall('getBlog', {});
-            if (resBlog.status === 'success') setBlogPosts(normalizeKeys(resBlog.data).reverse()); 
-
-            if (role === 'admin' || String(userStatus || '').trim().toLowerCase() === 'activo') {
-                const resVideos = await apiCall('getVideos', {});
-                if (resVideos.status === 'success') {
-                    const cv = normalizeKeys(resVideos.data); 
-                    setVideos(cv);
-                    if(cv.length > 0) setExpandedCategories({ [cv[0].Categoria || 'General']: true });
-                }
-                const resRanking = await apiCall('getRanking', {});
-                if (resRanking.status === 'success') setRankingList(normalizeKeys(resRanking.data));
-                
-                const resRetos = await apiCall('getRetos', {});
-                if (resRetos.status === 'success') setRetosList(normalizeKeys(resRetos.data).reverse());
-            }
-
-            if (role === 'admin') {
-                const resUsers = await apiCall('getUsers', { role: 'admin' });
-                if (resUsers.status === 'success') setUsersList(normalizeKeys(resUsers.data));
-                const resPlanes = await apiCall('getPlanes', {});
-                if (resPlanes.status === 'success') setPlanesList(resPlanes.data);
-            }
-        } catch (err) {
-            console.error("Error cargando datos:", err);
-        } finally {
-            setDataLoading(false);
-        }
-    };
-
-    // ---- LÓGICA DE ADMINISTRADOR: EDITAR USUARIO ----
-    const openEditModal = (u) => {
-        let initType = 'elementa';
-        if(planesList.antiguos?.some(p => p.plan === u.Plan)) initType = 'antiguos';
-        setPlanTypeSelection(initType);
-        setEditingUser({
-            ...u,
-            'Fecha Ingreso': safeDateStr(u['Fecha Ingreso']),
-            'Fecha de Caducidad': safeDateStr(u['Fecha de Caducidad'])
-        });
-    };
-
-    const calculateAutoExpiry = (fechaInicio, planName, planType) => {
-        if(!fechaInicio || !planName) return '';
-        const planInfo = planesList[planType]?.find(p => p.plan === planName);
-        if(!planInfo || !planInfo.periodo) return '';
-        
-        let date = new Date(fechaInicio);
-        if(isNaN(date)) return '';
-
-        const per = planInfo.periodo.toLowerCase();
-        if(per.includes('12 clases')) return ''; 
-        // Usamos métodos UTC para evitar que el timezone corra la fecha 1 día hacia atrás
-        if(per.includes('mensual')) date.setUTCMonth(date.getUTCMonth() + 1);
-        else if(per.includes('semestre')) date.setUTCMonth(date.getUTCMonth() + 6);
-        else if(per.includes('año') || per.includes('anual')) date.setUTCFullYear(date.getUTCFullYear() + 1);
-        
-        return date.toISOString().split('T')[0];
-    };
-
-    const handleAdminUpdateUser = async (e) => {
-        e.preventDefault(); setLoading(true); setErrorMsg(''); setSuccessMsg('');
-        
-        const dataToSave = {
-            'Nombres': e.target.nombres.value,
-            'Apellidos': e.target.apellidos.value,
-            'Cedula': e.target.cedula.value,
-            'Telefono': e.target.telefono.value,
-            'Plan': e.target.plan.value,
-            'Estado': e.target.estado.value,
-            'Fecha Ingreso': e.target.ingreso.value,
-            'Fecha de Caducidad': e.target.caducidad ? e.target.caducidad.value : '',
-            'Días Restantes': e.target.clases ? e.target.clases.value : editingUser['Días Restantes']
         };
 
-        const linkedEmail = e.target.pareja ? e.target.pareja.value : null;
+        const getVideoData = (url) => {
+            if (!url) return { type: null, id: null };
+            const safeUrl = String(url);
+            const ytRegex = new RegExp("^.*(youtu\\.be\\/|v\\/|u\\/\\w\\/|embed\\/|watch\\?v=|\\&v=)([^#\\&\\?]*).*");
+            const ytMatch = safeUrl.match(ytRegex);
+            if (ytMatch && ytMatch[2].length === 11) return { type: 'youtube', id: ytMatch[2] };
+            const driveRegex = new RegExp("(?:\\/d\\/|id=)([a-zA-Z0-9_-]+)");
+            const driveMatch = safeUrl.match(driveRegex);
+            if (driveMatch) return { type: 'drive', id: driveMatch[1] };
+            return { type: null, id: null };
+        };
 
-        const res = await apiCall('updateUser', { adminRole: user.role, email: editingUser.Correo, data: dataToSave, linkedEmail });
-        if(res.status === 'success') {
-            setSuccessMsg('Atleta actualizado correctamente');
-            setEditingUser(null);
-            fetchData(user.role, user.status); 
-        } else setErrorMsg(res.message);
-        setLoading(false);
-    };
+        const normalizeImageUrl = (url) => {
+            if (!url) return '';
+            const safeUrl = String(url);
+            const driveRegex = new RegExp("(?:\\/d\\/|id=)([a-zA-Z0-9_-]+)");
+            const driveMatch = safeUrl.match(driveRegex);
+            if (driveMatch) return `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
+            return safeUrl;
+        };
 
-    // ---- LÓGICA DE RETOS Y BLOG ----
-    const handleAdminAddBlog = async (e) => {
-        e.preventDefault(); setLoading(true); setErrorMsg(''); setSuccessMsg('');
-        const fileInput = e.target.imagen.files[0];
-        let imageUrl = '';
-        if (fileInput) {
-            setSuccessMsg('Subiendo foto a Drive...');
-            const reader = new FileReader();
-            reader.readAsDataURL(fileInput);
-            await new Promise(resolve => reader.onload = () => {
-                apiCall('uploadImage', { adminRole: user.role, base64: reader.result, filename: fileInput.name })
-                    .then(up => { if(up.status === 'success') imageUrl = up.url; resolve(); });
-            });
-        }
-        const res = await apiCall('addBlog', {
-            adminRole: user.role, titulo: e.target.titulo.value, etiqueta: e.target.etiqueta.value,
-            descripcion: e.target.descCorta.value, // Asegura compatibilidad con el backend 
-            descripcionCorta: e.target.descCorta.value, contenido: e.target.contenido.value,
-            autor: e.target.autor.value, urlImagen: imageUrl
-        });
-        if(res.status === 'success') { setSuccessMsg('Noticia publicada'); e.target.reset(); fetchData(user.role, user.status); } 
-        else setErrorMsg(res.message);
-        setLoading(false); setTimeout(() => setSuccessMsg(''), 4000);
-    };
+        const safeDateStr = (dateStr) => {
+            if(!dateStr) return '';
+            const d = new Date(dateStr);
+            return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+        };
 
-    const handleAdminAddReto = async (e) => {
-        e.preventDefault(); setLoading(true); setErrorMsg(''); setSuccessMsg('');
-        const res = await apiCall('addReto', {
-            adminRole: user.role, titulo: e.target.titulo.value, descripcion: e.target.descripcion.value,
-            redSocial: e.target.redSocial.value, puntos: e.target.puntos.value
-        });
-        if(res.status === 'success') { setSuccessMsg('Reto publicado'); e.target.reset(); fetchData(user.role, user.status); } 
-        else setErrorMsg(res.message);
-        setLoading(false); setTimeout(() => setSuccessMsg(''), 4000);
-    };
+        const formatearFecha = (fechaString) => {
+            if (!fechaString) return 'N/A';
+            const fecha = new Date(fechaString);
+            if(isNaN(fecha.getTime())) return String(fechaString);
+            return fecha.toLocaleDateString('es-CO');
+        };
 
-    // ---- AYUDANTES VISUALES ----
-    const getDiasBadge = (u) => {
-        const stat = String(u.Estado || '').trim().toLowerCase();
-        const hoy = new Date(); const today = new Date(hoy.setHours(0,0,0,0));
-        
-        if(stat === 'aspirante') {
-            if(!u['Fecha Registro']) return null;
-            const d = calcularDias(today, u['Fecha Registro']);
-            return <span className="text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded text-[10px] font-black">Hace {d} días</span>;
-        }
-        if(stat === 'inactivo') {
-            if(!u['Fecha de Caducidad']) return null;
-            const d = calcularDias(today, u['Fecha de Caducidad']);
-            return <span className="text-red-700 bg-red-100 px-2 py-0.5 rounded text-[10px] font-black">Vencido hace {d} días</span>;
-        }
-        if(stat === 'activo') {
-            if(String(u.Plan || '').includes('12 Clases')) return <span className="text-blue-700 bg-blue-100 px-2 py-0.5 rounded text-[10px] font-black">{u['Días Restantes']} Clases Rest.</span>;
-            if(!u['Fecha de Caducidad']) return null;
-            const d = calcularDias(u['Fecha de Caducidad'], today);
-            if(0 > d) return <span className="text-red-700 bg-red-100 px-2 py-0.5 rounded text-[10px] font-black">Debe renovar</span>;
-            return <span className="text-green-700 bg-green-100 px-2 py-0.5 rounded text-[10px] font-black">Le quedan {d} días</span>;
-        }
-        return null;
-    };
-
-    const verificarCaducidad = (fechaCaducidad) => {
-        if (!fechaCaducidad) return null;
-        const expDate = new Date(fechaCaducidad);
-        if(isNaN(expDate)) return null;
-        const today = new Date(); today.setHours(0,0,0,0); expDate.setHours(0,0,0,0);
-        const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
-
-        if (0 > diffDays) return { estado: 'vencido', mensaje: 'Membresía Vencida', dias: diffDays };
-        if (0 === diffDays) return { estado: 'alerta', mensaje: 'Tu membresía vence HOY', dias: diffDays };
-        if (5 >= diffDays) return { estado: 'aviso', mensaje: `Vence en ${diffDays} día(s)`, dias: diffDays };
-        return { estado: 'bien', mensaje: `Vence el ${formatearFecha(fechaCaducidad)}` };
-    };
-
-    const infoCaducidad = user && !String(user.plan || '').includes('12 Clases') ? verificarCaducidad(user.caducidad) : null;
-    const misPuntos = rankingList.find(r => String(r.Nombre || r.Nombres || '').toLowerCase() === String(user?.name || '').toLowerCase())?.Puntos || 0;
-
-    const Loader = () => <div className="flex justify-center py-12"><div className="w-10 h-10 border-4 border-brand-dark border-t-transparent rounded-full animate-spin"></div></div>;
-
-    const groupedFilteredVideos = useMemo(() => {
-        const lowerSearch = searchTerm.toLowerCase();
-        const filtered = videos.filter(v => String(v.Nombre || '').toLowerCase().includes(lowerSearch) || String(v.Descripcion || '').toLowerCase().includes(lowerSearch));
-        return filtered.reduce((acc, v) => {
-            const cat = v.Categoria || 'General';
-            if (!acc[cat]) acc[cat] = []; acc[cat].push(v); return acc;
-        }, {});
-    }, [videos, searchTerm]);
-
-    const toggleCategory = (cat) => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
-
-    const Topbar = () => (
-        <div className="sticky top-0 z-[100] bg-brand-bg1/90 backdrop-blur-xl px-6 py-4 flex justify-between items-center shadow-sm border-b border-white/20">
-            <div className="flex items-center gap-2">
-                <div className="bg-brand-dark p-2 rounded-lg shadow-lg"><Activity className="w-5 h-5 text-brand-bg1" /></div>
-                <span className="font-black text-xl tracking-widest uppercase text-brand-dark">Elements</span>
-            </div>
-            {user && (
-                <button onClick={handleLogout} className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-black/5 transition-colors text-brand-dark/80 font-bold text-xs uppercase tracking-wider">
-                    Salir <LogOut className="w-4 h-4" />
-                </button>
-            )}
-        </div>
-    );
-
-    const BottomNav = () => (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-md bg-brand-dark/95 backdrop-blur-lg p-2 rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.4)] flex justify-between items-center z-[100] border border-white/10">
-            {['dashboard', 'academy', 'ranking', 'blog'].map(view => {
-                const isApp = currentView === view;
-                const icons = { dashboard: UserCircle, academy: Video, ranking: Trophy, blog: BookOpen };
-                const labels = { dashboard: 'Inicio', academy: 'Aprende', ranking: 'Ranking', blog: 'Blog' };
-                const Icon = icons[view];
-                return (
-                    <button key={view} onClick={() => handleNavigation(view)} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${isApp ? 'bg-brand-bg1 w-28 text-brand-dark shadow-md' : 'text-white/60 hover:text-white flex-1'}`}>
-                        <Icon className="w-5 h-5" />
-                        {isApp && <span className="ml-1.5 text-xs font-black uppercase tracking-wider animate-fade-in">{labels[view]}</span>}
-                    </button>
-                );
-            })}
-            {user?.role === 'admin' && (
-                <button onClick={() => handleNavigation('admin')} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${currentView === 'admin' ? 'bg-brand-bg1 w-28 text-brand-dark shadow-md' : 'text-white/60 hover:text-white flex-1'}`}>
-                    <Users className="w-5 h-5" />
-                    {currentView === 'admin' && <span className="ml-1.5 text-xs font-black uppercase tracking-wider animate-fade-in">Admin</span>}
-                </button>
-            )}
-        </div>
-    );
-
-    return (
-        <div className="relative min-h-screen overflow-x-hidden bg-brand-bg1 text-brand-dark font-sans selection:bg-brand-dark selection:text-white">
-            <style dangerouslySetInnerHTML={{ __html: customStyles }} />
+        // Algoritmo para calcular Racha Continua
+        const calculateStreak = (dateStrings) => {
+            if(!dateStrings || dateStrings.length === 0) return 0;
+            const uniqueDates = [...new Set(dateStrings.map(d => new Date(d).setHours(0,0,0,0)))].sort((a,b) => b - a);
+            const today = new Date().setHours(0,0,0,0);
+            const yesterday = today - 86400000;
             
-            <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-0 -left-10 w-72 h-72 bg-[#f4e6d4] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob"></div>
-                <div className="absolute top-40 right-0 w-80 h-80 bg-[#cbb092] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000"></div>
-                <div className="absolute -bottom-20 left-20 w-96 h-96 bg-[#dfc5a6] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000"></div>
-            </div>
+            let streak = 0;
+            let currentCheck = uniqueDates[0] === today ? today : (uniqueDates[0] === yesterday ? yesterday : null);
+            
+            if(currentCheck !== null) {
+                for(let d of uniqueDates) {
+                    if(d === currentCheck) {
+                        streak++;
+                        currentCheck -= 86400000;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            return streak;
+        };
 
-            <div className="relative z-10 pb-32">
-                {(user || currentView !== 'login') && <Topbar />}
+        const Loader = () => <div className="flex justify-center py-12"><div className="w-10 h-10 border-4 border-brand-dark border-t-transparent rounded-full animate-spin"></div></div>;
 
-                <div className="max-w-4xl mx-auto px-4 pt-6">
-                    
-                    {!user && (currentView === 'login' || currentView === 'register') && (
-                        <div className="flex flex-col items-center justify-center animate-slide-up py-10">
-                            <div className="mb-8 flex flex-col items-center">
-                                <div className="w-24 h-24 rounded-[2rem] bg-brand-dark flex items-center justify-center shadow-2xl mb-4 rotate-3 border-4 border-white/20"><Activity className="w-12 h-12 text-brand-bg1 -rotate-3" /></div>
-                                <h1 className="text-4xl font-black uppercase tracking-widest text-brand-dark drop-shadow-sm">Elements</h1>
-                                <h2 className="text-xl font-medium tracking-[0.4em] text-brand-dark/70">TRAINING BOX</h2>
-                            </div>
+        function App() {
+            const [user, setUser] = useState(null); 
+            const [currentView, setCurrentView] = useState('login'); 
+            const [loading, setLoading] = useState(false);
+            const [dataLoading, setDataLoading] = useState(false);
+            const [errorMsg, setErrorMsg] = useState('');
+            const [successMsg, setSuccessMsg] = useState('');
+
+            // Data States
+            const [videos, setVideos] = useState([]);
+            const [blogPosts, setBlogPosts] = useState([]);
+            const [usersList, setUsersList] = useState([]);
+            const [rankingList, setRankingList] = useState([]);
+            const [retosList, setRetosList] = useState([]);
+            const [evidenciasList, setEvidenciasList] = useState([]);
+            const [userConexiones, setUserConexiones] = useState([]);
+            const [opcionesObservacion, setOpcionesObservacion] = useState([]);
+            
+            // Interaction States
+            const [searchTerm, setSearchTerm] = useState('');
+            const [expandedCategories, setExpandedCategories] = useState({});
+            const [selectedPost, setSelectedPost] = useState(null); 
+            const [selectedVideo, setSelectedVideo] = useState(null); 
+            const [restrictedPopup, setRestrictedPopup] = useState(false);
+            const [uploadingReto, setUploadingReto] = useState(null);
+            const [previewImgUrl, setPreviewImgUrl] = useState(null);
+
+            // Admin States
+            const [adminTab, setAdminTab] = useState('evidencias'); 
+            const [adminDataSheets] = useState(['INFO PERSONAS', 'VIDEOS', 'RETOS', 'BLOG', 'DATOS', 'PLANES', 'ADMINISTRATIVOS', 'TRAZABILIDAD']);
+            const [selectedAdminSheet, setSelectedAdminSheet] = useState('INFO PERSONAS');
+            const [adminSheetData, setAdminSheetData] = useState([]);
+            const [editingGenericRow, setEditingGenericRow] = useState(null);
+            const [adminEvidencias, setAdminEvidencias] = useState([]);
+            const [adminEvalEvidencia, setAdminEvalEvidencia] = useState(null);
+
+            useEffect(() => {
+                try {
+                    const sessionUser = localStorage.getItem('elementsSession');
+                    if(sessionUser) {
+                        const parsedUser = JSON.parse(sessionUser);
+                        setUser(parsedUser);
+                        setCurrentView('dashboard');
+                        fetchData(parsedUser.role, parsedUser.status, parsedUser.email);
+                    }
+                } catch (e) {}
+            }, []);
+
+            useEffect(() => {
+                if(evidenciasList.length > 0 && typeof confetti === 'function') {
+                    try {
+                        const notified = JSON.parse(localStorage.getItem('notifiedChallenges') || '[]');
+                        let shouldAnimate = false;
+                        const newNotified = [...notified];
+
+                        evidenciasList.forEach(ev => {
+                            if(ev.Estado === 'Aprobado' && !notified.includes(ev.ID_Evidencia)) {
+                                shouldAnimate = true;
+                                newNotified.push(ev.ID_Evidencia);
+                            }
+                        });
+
+                        if(shouldAnimate) {
+                            confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ['#E5D3BD', '#2A241F', '#4ade80', '#eab308'] });
+                            localStorage.setItem('notifiedChallenges', JSON.stringify(newNotified));
+                        }
+                    } catch(e) {}
+                }
+            }, [evidenciasList]);
+
+            const apiCall = async (action, payload) => {
+                try {
+                    const response = await fetch(GOOGLE_SCRIPT_URL, {
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'text/plain' }, 
+                        body: JSON.stringify({ action, payload, apiSecret: API_SECRET })
+                    });
+                    return await response.json();
+                } catch (error) { return { status: 'error', message: 'Error de red.' }; }
+            };
+
+            const handleAuth = async (e, action) => {
+                e.preventDefault(); setErrorMsg(''); setLoading(true);
+                let payload = { email: e.target.email.value, password: e.target.password.value };
+                if (action === 'register') {
+                    payload = {
+                        ...payload, nombres: e.target.nombres.value, apellidos: e.target.apellidos.value, 
+                        cedula: e.target.cedula.value, telefono: e.target.telefono.value, eps: e.target.eps.value, 
+                        fechaNac: e.target.fechaNac.value, contactoEmergencia: e.target.contactoEmergencia.value, 
+                        parentesco: e.target.parentesco.value
+                    };
+                }
+                const res = await apiCall(action, payload);
+                if (res.status === 'success') {
+                    setUser(res.user); 
+                    try { localStorage.setItem('elementsSession', JSON.stringify(res.user)); } catch(e){} 
+                    setCurrentView('dashboard'); 
+                    fetchData(res.user.role, res.user.status, res.user.email);
+                } else { setErrorMsg(res.message); }
+                setLoading(false);
+            };
+
+            const handleLogout = () => { 
+                setUser(null); setCurrentView('login'); 
+                try { localStorage.removeItem('elementsSession'); } catch(e){}
+            };
+
+            const handleNavigation = (view) => {
+                if (['academy', 'ranking'].includes(view) && user?.role !== 'admin' && String(user?.status || '').trim().toLowerCase() !== 'activo') {
+                    setRestrictedPopup(true); return;
+                }
+                setCurrentView(view); window.scrollTo(0, 0);
+            };
+
+            const fetchData = async (role, userStatus, email) => {
+                setDataLoading(true);
+                try {
+                    const resBlog = await apiCall('getBlog', {});
+                    if (resBlog.status === 'success') setBlogPosts(normalizeKeys(resBlog.data).reverse()); 
+
+                    if (role === 'admin' || String(userStatus || '').trim().toLowerCase() === 'activo') {
+                        const [resVideos, resRanking, resRetos, resEvidencias, resConexiones] = await Promise.all([
+                            apiCall('getVideos', {}), apiCall('getRanking', {}), apiCall('getRetos', {}), apiCall('getEvidenciasUser', { email }), apiCall('getUserStats', { email })
+                        ]);
+                        
+                        if (resVideos.status === 'success') {
+                            const cv = normalizeKeys(resVideos.data); 
+                            setVideos(cv);
+                            if(cv.length > 0) setExpandedCategories({ [cv[0].Categoria || 'General']: true });
+                        }
+                        if (resRanking.status === 'success') setRankingList(normalizeKeys(resRanking.data));
+                        if (resRetos.status === 'success') setRetosList(normalizeKeys(resRetos.data).reverse());
+                        if (resEvidencias.status === 'success') setEvidenciasList(normalizeKeys(resEvidencias.data));
+                        if (resConexiones.status === 'success') setUserConexiones(resConexiones.data);
+                    }
+
+                    if (role === 'admin') {
+                        fetchAdminSheetData(selectedAdminSheet);
+                        const evAdmin = await apiCall('getEvidenciasAdmin', { adminRole: 'admin' });
+                        if(evAdmin.status === 'success') setAdminEvidencias(normalizeKeys(evAdmin.data).reverse());
+                        const obsCall = await apiCall('getObservaciones', { adminRole: 'admin' });
+                        if(obsCall.status === 'success') setOpcionesObservacion(obsCall.data);
+                    }
+                } catch (err) {} finally { setDataLoading(false); }
+            };
+
+            // ---- RETOS Y LÓGICAS DE PROGRESO ----
+            const activeChallenges = useMemo(() => {
+                const hoy = new Date().getTime();
+                return retosList.filter(r => {
+                    if(!r['Fecha de Inicio'] || !r['Fecha de Fin']) return true; 
+                    const start = new Date(r['Fecha de Inicio']).getTime();
+                    const end = new Date(r['Fecha de Fin']).getTime() + 86400000; 
+                    return hoy >= start && hoy <= end;
+                });
+            }, [retosList]);
+
+            const userStreak = useMemo(() => calculateStreak(userConexiones), [userConexiones]);
+            const misPuntos = rankingList.find(r => String(r.Nombre || r.Nombres || '').toLowerCase() === String(user?.name || '').toLowerCase() || String(r.Correo || '').toLowerCase() === String(user?.email || '').toLowerCase())?.Puntos || 0;
+
+            const verificarCaducidad = (fechaCaducidad) => {
+                if (!fechaCaducidad) return null;
+                const expDate = new Date(fechaCaducidad);
+                if(isNaN(expDate.getTime())) return null;
+                const today = new Date(); today.setHours(0,0,0,0); expDate.setHours(0,0,0,0);
+                const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+
+                if (0 > diffDays) return { estado: 'vencido', mensaje: 'Tu suscripción está VENCIDA', dias: diffDays };
+                if (0 === diffDays) return { estado: 'alerta', mensaje: 'Tu membresía vence HOY', dias: diffDays };
+                if (5 >= diffDays) return { estado: 'aviso', mensaje: `¡Alerta! Tu plan vence en ${diffDays} día(s)`, dias: diffDays };
+                return null;
+            };
+
+            const infoCaducidad = user && !String(user.plan || '').includes('12 Clases') ? verificarCaducidad(user.caducidad) : null;
+
+            const handleFileChange = (e) => {
+                const file = e.target.files[0];
+                if(file) { setPreviewImgUrl(URL.createObjectURL(file)); } 
+                else { setPreviewImgUrl(null); }
+            };
+
+            const handleEvidenceSubmit = async (e) => {
+                e.preventDefault(); setLoading(true); setErrorMsg(''); setSuccessMsg('');
+                const fileInput = e.target.imagen.files[0];
+                let base64 = null; let filename = null;
+                
+                if (fileInput) {
+                    filename = fileInput.name;
+                    const reader = new FileReader();
+                    reader.readAsDataURL(fileInput);
+                    await new Promise(resolve => reader.onload = () => { base64 = reader.result; resolve(); });
+                }
+                
+                const res = await apiCall('submitEvidence', {
+                    email: user.email, retoTitulo: uploadingReto.Titulo, puntos: uploadingReto.Puntos, base64, filename
+                });
+                
+                if(res.status === 'success') { 
+                    setSuccessMsg('Evidencia enviada para validación. ¡Buen trabajo!');
+                    setUploadingReto(null); setPreviewImgUrl(null);
+                    fetchData(user.role, user.status, user.email); 
+                } else setErrorMsg(res.message);
+                setLoading(false); setTimeout(() => setSuccessMsg(''), 4000);
+            };
+
+            const completeVideoChallenge = async () => {
+                if(!selectedVideo || !selectedVideo.id) return;
+                const videoReto = activeChallenges.find(r => String(r.Titulo).toLowerCase().includes('video'));
+                if(!videoReto) { alert("El reto de ver videos no está vigente en este momento."); return; }
+
+                setLoading(true);
+                const res = await apiCall('markVideoWatched', { email: user.email, videoId: selectedVideo.id, retoTitulo: videoReto.Titulo, puntos: videoReto.Puntos });
+                if(res.status === 'success') {
+                    setSuccessMsg('¡Puntos de video sumados a tu ranking!');
+                    fetchData(user.role, user.status, user.email);
+                } else { alert(res.message); }
+                setLoading(false);
+            };
+
+            // ---- GESTION DE ADMINISTRADOR ----
+            const handleAdminValidateEvidence = async (e) => {
+                e.preventDefault(); setLoading(true);
+                const obs = e.target.observacion.value;
+                const estado = e.target.decision.value;
+                
+                const res = await apiCall('validateEvidence', { 
+                    adminRole: user.role, idEvidencia: adminEvalEvidencia.ID_Evidencia, nuevoEstado: estado, observacion: obs 
+                });
+                if(res.status === 'success') {
+                    setAdminEvalEvidencia(null);
+                    const evAdmin = await apiCall('getEvidenciasAdmin', { adminRole: 'admin' });
+                    if(evAdmin.status === 'success') setAdminEvidencias(normalizeKeys(evAdmin.data).reverse());
+                }
+                setLoading(false);
+            };
+
+            const fetchAdminSheetData = async (sheetName) => {
+                setDataLoading(true);
+                const res = await apiCall('getGenericSheet', { adminRole: user.role, sheetName });
+                if(res.status === 'success') setAdminSheetData(res.data);
+                setDataLoading(false);
+            };
+
+            const handleGenericUpdate = async (e) => {
+                e.preventDefault(); setLoading(true);
+                const formData = new FormData(e.target);
+                const dataToSave = {};
+                for(let [key, value] of formData.entries()) { dataToSave[key] = value; }
+                
+                const res = await apiCall('updateGenericRow', { 
+                    adminRole: user.role, sheetName: selectedAdminSheet, 
+                    rowIndex: editingGenericRow._rowIndex, data: dataToSave 
+                });
+                
+                if(res.status === 'success') {
+                    setEditingGenericRow(null);
+                    fetchAdminSheetData(selectedAdminSheet);
+                } else { alert("Error al guardar: " + res.message); }
+                setLoading(false);
+            };
+
+            const handleAdminAddBlog = async (e) => {
+                e.preventDefault(); setLoading(true); setErrorMsg(''); setSuccessMsg('');
+                const fileInput = e.target.imagen ? e.target.imagen.files[0] : null;
+                let imageUrl = '';
+                if (fileInput) {
+                    setSuccessMsg('Subiendo foto a Drive...');
+                    const reader = new FileReader();
+                    reader.readAsDataURL(fileInput);
+                    await new Promise(resolve => reader.onload = () => {
+                        apiCall('uploadImage', { adminRole: user.role, base64: reader.result, filename: fileInput.name })
+                            .then(up => { if(up.status === 'success') imageUrl = up.url; resolve(); });
+                    });
+                }
+                const res = await apiCall('addBlog', {
+                    adminRole: user.role, titulo: e.target.titulo.value, etiqueta: e.target.etiqueta.value,
+                    descripcion: e.target.descCorta.value, 
+                    descripcionCorta: e.target.descCorta.value, contenido: e.target.contenido.value,
+                    autor: e.target.autor.value, urlImagen: imageUrl
+                });
+                if(res.status === 'success') { setSuccessMsg('Noticia publicada'); e.target.reset(); fetchData(user.role, user.status, user.email); } 
+                else setErrorMsg(res.message);
+                setLoading(false); setTimeout(() => setSuccessMsg(''), 4000);
+            };
+
+            const groupedFilteredVideos = useMemo(() => {
+                const lowerSearch = String(searchTerm || '').toLowerCase();
+                const filtered = videos.filter(v => String(v.Nombre || '').toLowerCase().includes(lowerSearch) || String(v.Descripcion || '').toLowerCase().includes(lowerSearch));
+                return filtered.reduce((acc, v) => {
+                    const cat = v.Categoria || 'General';
+                    if (!acc[cat]) acc[cat] = []; acc[cat].push(v); return acc;
+                }, {});
+            }, [videos, searchTerm]);
+
+            const toggleCategory = (cat) => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
+
+            const Topbar = () => (
+                <div className="sticky top-0 z-[100] bg-brand-bg1/90 backdrop-blur-xl px-6 py-4 flex justify-between items-center shadow-sm border-b border-white/20">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-brand-dark p-2 rounded-lg shadow-lg"><Activity className="w-5 h-5 text-brand-bg1" /></div>
+                        <span className="font-black text-xl tracking-widest uppercase text-brand-dark">Elements</span>
+                    </div>
+                    {user && (
+                        <button onClick={handleLogout} className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-black/5 transition-colors text-brand-dark/80 font-bold text-xs uppercase tracking-wider">
+                            Salir <LogOut className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
+            );
+
+            const BottomNav = () => (
+                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-md bg-brand-dark/95 backdrop-blur-lg p-2 rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.4)] flex justify-between items-center z-[100] border border-white/10">
+                    {['dashboard', 'academy', 'ranking', 'blog'].map(view => {
+                        const isApp = currentView === view;
+                        const icons = { dashboard: UserCircle, academy: Video, ranking: Trophy, blog: BookOpen };
+                        const labels = { dashboard: 'Inicio', academy: 'Aprende', ranking: 'Ranking', blog: 'Blog' };
+                        const Icon = icons[view];
+                        return (
+                            <button key={view} onClick={() => handleNavigation(view)} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${isApp ? 'bg-brand-bg1 w-28 text-brand-dark shadow-md' : 'text-white/60 hover:text-white flex-1'}`}>
+                                <Icon className="w-5 h-5" />
+                                {isApp && <span className="ml-1.5 text-xs font-black uppercase tracking-wider animate-fade-in">{labels[view]}</span>}
+                            </button>
+                        );
+                    })}
+                    {user?.role === 'admin' && (
+                        <button onClick={() => handleNavigation('admin')} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${currentView === 'admin' ? 'bg-brand-bg1 w-28 text-brand-dark shadow-md' : 'text-white/60 hover:text-white flex-1'}`}>
+                            <Database className="w-5 h-5" />
+                            {currentView === 'admin' && <span className="ml-1.5 text-xs font-black uppercase tracking-wider animate-fade-in">Admin</span>}
+                        </button>
+                    )}
+                </div>
+            );
+
+            return (
+                <div className="relative min-h-screen overflow-x-hidden bg-brand-bg1 text-brand-dark font-sans selection:bg-brand-dark selection:text-white">
+                    <style dangerouslySetInnerHTML={{ __html: customStyles }} />
+                    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+                        <div className="absolute top-0 -left-10 w-72 h-72 bg-[#f4e6d4] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob"></div>
+                        <div className="absolute top-40 right-0 w-80 h-80 bg-[#cbb092] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000"></div>
+                        <div className="absolute -bottom-20 left-20 w-96 h-96 bg-[#dfc5a6] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000"></div>
+                    </div>
+
+                    <div className="relative z-10 pb-32">
+                        {(user || currentView !== 'login') && <Topbar />}
+
+                        <div className="max-w-4xl mx-auto px-4 pt-6">
                             
-                            <div className="glass-card p-6 sm:p-8 rounded-[2.5rem] w-full max-w-md">
-                                <h3 className="text-2xl font-black mb-6 text-center">{currentView === 'login' ? 'Bienvenido' : 'Crear Cuenta'}</h3>
-                                {errorMsg && <div className="bg-red-500/10 text-red-700 p-3 rounded-xl mb-6 text-sm font-bold text-center border border-red-500/20">{errorMsg}</div>}
-                                
-                                <form onSubmit={(e) => handleAuth(e, currentView)} className="space-y-4">
-                                    {currentView === 'register' && (
-                                        <div className="h-64 overflow-y-auto hide-scroll space-y-4 px-1 pb-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Nombres</label><input type="text" name="nombres" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
-                                                <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Apellidos</label><input type="text" name="apellidos" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Cédula</label><input type="number" name="cedula" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
-                                                <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Teléfono</label><input type="tel" name="telefono" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">EPS</label><input type="text" name="eps" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
-                                                <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Nacimiento</label><input type="date" name="fechaNac" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
-                                            </div>
-                                            <div className="p-4 bg-brand-dark/5 rounded-xl border border-brand-dark/10 space-y-4">
-                                                <p className="text-[10px] font-black uppercase text-brand-dark/50">Contacto de Emergencia</p>
-                                                <input type="text" name="contactoEmergencia" required placeholder="Nombre y Teléfono" className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" />
-                                                <input type="text" name="parentesco" required placeholder="Parentesco (Ej: Madre)" className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" />
+                            {/* LOGIN & REGISTER */}
+                            {!user && (currentView === 'login' || currentView === 'register') && (
+                                <div className="flex flex-col items-center justify-center animate-slide-up py-10">
+                                    <div className="mb-8 flex flex-col items-center">
+                                        <div className="w-24 h-24 rounded-[2rem] bg-brand-dark flex items-center justify-center shadow-2xl mb-4 rotate-3 border-4 border-white/20"><Activity className="w-12 h-12 text-brand-bg1 -rotate-3" /></div>
+                                        <h1 className="text-4xl font-black uppercase tracking-widest text-brand-dark drop-shadow-sm">Elements</h1>
+                                        <h2 className="text-xl font-medium tracking-[0.4em] text-brand-dark/70">TRAINING BOX</h2>
+                                    </div>
+                                    
+                                    <div className="glass-card p-6 sm:p-8 rounded-[2.5rem] w-full max-w-md">
+                                        <h3 className="text-2xl font-black mb-6 text-center">{currentView === 'login' ? 'Bienvenido' : 'Crear Cuenta'}</h3>
+                                        {errorMsg && <div className="bg-red-500/10 text-red-700 p-3 rounded-xl mb-6 text-sm font-bold text-center border border-red-500/20">{errorMsg}</div>}
+                                        
+                                        <form onSubmit={(e) => handleAuth(e, currentView)} className="space-y-4">
+                                            {currentView === 'register' && (
+                                                <div className="h-64 overflow-y-auto hide-scroll space-y-4 px-1 pb-4">
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Nombres</label><input type="text" name="nombres" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                                        <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Apellidos</label><input type="text" name="apellidos" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Cédula</label><input type="number" name="cedula" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                                        <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Teléfono</label><input type="tel" name="telefono" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">EPS</label><input type="text" name="eps" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                                        <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Nacimiento</label><input type="date" name="fechaNac" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                                    </div>
+                                                    <div className="p-4 bg-brand-dark/5 rounded-xl border border-brand-dark/10 space-y-4">
+                                                        <p className="text-[10px] font-black uppercase text-brand-dark/50">Contacto de Emergencia</p>
+                                                        <input type="text" name="contactoEmergencia" required placeholder="Nombre y Teléfono" className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" />
+                                                        <input type="text" name="parentesco" required placeholder="Parentesco (Ej: Madre)" className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" />
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Correo Electrónico</label><input type="email" name="email" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                            <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Contraseña</label><input type="password" name="password" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
+                                            
+                                            <button type="submit" disabled={loading} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black text-lg mt-2 hover:scale-[1.02] transition-transform shadow-xl">
+                                                {loading ? 'Procesando...' : (currentView === 'login' ? 'Entrar al Box' : 'Crear Mi Cuenta')}
+                                            </button>
+                                        </form>
+                                        <div className="mt-6 text-center">
+                                            <button onClick={() => setCurrentView(currentView === 'login' ? 'register' : 'login')} className="text-xs font-bold text-brand-dark/80 hover:text-brand-dark underline decoration-2 underline-offset-4">
+                                                {currentView === 'login' ? 'No tengo cuenta, registrarme' : 'Ya tengo cuenta, iniciar sesión'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* DASHBOARD */}
+                            {user && currentView === 'dashboard' && (
+                                <div className="animate-slide-up space-y-6">
+                                    {successMsg && <div className="bg-green-500 text-white p-4 rounded-2xl text-center font-bold animate-fade-in shadow-lg">{successMsg}</div>}
+                                    
+                                    {/* ALERTA DE CADUCIDAD PERMANENTE SI APLICAN CONDICIONES */}
+                                    {infoCaducidad && (
+                                        <div className={`glass-card p-4 rounded-2xl flex items-start gap-3 border-l-4 shadow-md ${infoCaducidad.estado === 'vencido' ? 'border-red-600 bg-red-500/10' : 'border-orange-500 bg-orange-500/10'}`}>
+                                            <AlertCircle className={`w-6 h-6 shrink-0 mt-0.5 ${infoCaducidad.estado === 'vencido' ? 'text-red-600' : 'text-orange-600'}`} />
+                                            <div>
+                                                <p className={`font-black text-sm uppercase ${infoCaducidad.estado === 'vencido' ? 'text-red-800' : 'text-orange-800'}`}>Aviso de Suscripción</p>
+                                                <p className={`text-sm font-bold ${infoCaducidad.estado === 'vencido' ? 'text-red-700' : 'text-orange-700'}`}>{infoCaducidad.mensaje}</p>
                                             </div>
                                         </div>
                                     )}
-                                    <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Correo Electrónico</label><input type="email" name="email" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
-                                    <div><label className="block text-[10px] font-black mb-1 ml-1 uppercase text-brand-dark">Contraseña</label><input type="password" name="password" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-brand-dark" /></div>
-                                    
-                                    <button type="submit" disabled={loading} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black text-lg mt-2 hover:scale-[1.02] transition-transform shadow-xl">
-                                        {loading ? 'Procesando...' : (currentView === 'login' ? 'Entrar al Box' : 'Crear Mi Cuenta')}
-                                    </button>
-                                </form>
-                                <div className="mt-6 text-center">
-                                    <button onClick={() => setCurrentView(currentView === 'login' ? 'register' : 'login')} className="text-xs font-bold text-brand-dark/80 hover:text-brand-dark underline decoration-2 underline-offset-4">
-                                        {currentView === 'login' ? 'No tengo cuenta, registrarme' : 'Ya tengo cuenta, iniciar sesión'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
-                    {user && (
-                        <div className="animate-slide-up space-y-8">
-                            
-                            {currentView === 'dashboard' && (
-                                <div className="space-y-6">
                                     <div className="flex items-end justify-between px-2">
                                         <div>
                                             <p className="text-sm font-bold text-brand-dark/50 uppercase tracking-wider">Tu Perfil</p>
-                                            <h2 className="text-4xl font-black uppercase leading-none mt-1">{(user.name || 'Atleta').split(' ')[0]}</h2>
+                                            <h2 className="text-4xl font-black uppercase leading-none mt-1">{String(user.name || 'Atleta').split(' ')[0]}</h2>
                                         </div>
                                         <div className="flex flex-col items-center">
-                                            <div className="w-14 h-14 bg-brand-dark text-brand-bg1 rounded-full flex items-center justify-center font-black text-2xl shadow-lg ring-4 ring-white/30">{(user.name || 'E').charAt(0).toUpperCase()}</div>
+                                            <div className="w-14 h-14 bg-brand-dark text-brand-bg1 rounded-full flex items-center justify-center font-black text-2xl shadow-lg ring-4 ring-white/30">{String(user.name || 'E').charAt(0).toUpperCase()}</div>
                                         </div>
                                     </div>
-
-                                    {infoCaducidad && (infoCaducidad.estado === 'vencido' || infoCaducidad.estado === 'alerta' || infoCaducidad.estado === 'aviso') && (
-                                        <div className={`glass-card p-4 rounded-2xl flex items-start gap-3 border-l-4 ${infoCaducidad.estado === 'vencido' ? 'border-red-600' : 'border-yellow-500'}`}>
-                                            <AlertCircle className={`w-6 h-6 shrink-0 mt-0.5 ${infoCaducidad.estado === 'vencido' ? 'text-red-600' : 'text-yellow-600'}`} />
-                                            <div>
-                                                <p className={`font-black text-sm uppercase ${infoCaducidad.estado === 'vencido' ? 'text-red-800' : 'text-yellow-800'}`}>Aviso Importante</p>
-                                                <p className={`text-sm font-bold ${infoCaducidad.estado === 'vencido' ? 'text-red-700' : 'text-yellow-700'}`}>{infoCaducidad.mensaje}</p>
-                                            </div>
-                                        </div>
-                                    )}
 
                                     <div className="glass-card rounded-[2rem] p-6 flex flex-col sm:flex-row gap-4">
-                                        <div className="flex-1 bg-white/40 p-5 rounded-2xl flex justify-between items-center border border-white/50">
-                                            <div>
-                                                <p className="text-[10px] font-black text-brand-dark/50 uppercase tracking-wider">Plan / Suscripción</p>
-                                                <p className="text-2xl font-black uppercase">{user.plan || 'Ninguno'}</p>
-                                                {String(user.plan || '').includes('12 Clases') ? 
-                                                    <div className="flex items-center gap-1 text-brand-dark/80 font-black text-xs mt-1"><Clock className="w-3 h-3"/> <p>Te quedan {user.diasRestantes || 0} clases</p></div> :
-                                                    (infoCaducidad && infoCaducidad.estado === 'bien' && <div className="flex items-center gap-1 text-brand-dark/70 font-bold text-[10px] mt-1"><Clock className="w-3 h-3"/> <p>{infoCaducidad.mensaje}</p></div>)
-                                                }
+                                        <div className="flex-1 bg-white/40 p-5 rounded-2xl flex flex-col justify-center border border-white/50 relative overflow-hidden">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div>
+                                                    <p className="text-[10px] font-black text-brand-dark/50 uppercase tracking-wider">Plan Activo</p>
+                                                    <p className="text-2xl font-black uppercase">{user.plan || 'Ninguno'}</p>
+                                                </div>
+                                                <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase shadow-md ${String(user.status || '').trim().toLowerCase() === 'activo' ? 'bg-green-500 text-white' : (String(user.status || '').trim().toLowerCase() === 'aspirante' ? 'bg-yellow-500 text-white' : 'bg-red-500 text-white')}`}>{user.status || 'Aspirante'}</div>
                                             </div>
-                                            <div className={`px-5 py-2.5 rounded-full text-xs font-black uppercase shadow-md ${user.status.trim().toLowerCase() === 'activo' ? 'bg-green-500 text-white' : (user.status.trim().toLowerCase() === 'aspirante' ? 'bg-yellow-500 text-white' : 'bg-red-500 text-white')}`}>{user.status || 'Aspirante'}</div>
+                                            
+                                            {/* MOSTRAR FECHAS CLARAS */}
+                                            {String(user.plan || '').includes('12 Clases') ? (
+                                                <div className="flex items-center gap-1 text-brand-dark/80 font-black text-xs mt-1"><Clock className="w-3 h-3"/> <p>Te quedan {user.diasRestantes || 0} clases</p></div>
+                                            ) : (
+                                                <div className="mt-2 space-y-1">
+                                                    <p className="text-xs font-bold text-brand-dark/70"><strong className="text-brand-dark">Ingreso:</strong> {formatearFecha(user.ingreso)}</p>
+                                                    <p className="text-xs font-bold text-brand-dark/70"><strong className="text-brand-dark">Vencimiento:</strong> {formatearFecha(user.caducidad)}</p>
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="bg-brand-dark text-brand-bg1 p-5 rounded-2xl flex flex-col justify-center items-center shadow-xl min-w-[120px]">
-                                            <Trophy className="w-6 h-6 mb-1 opacity-70" />
-                                            <p className="text-[10px] font-black opacity-60 uppercase tracking-wider">Tus Puntos</p>
-                                            <p className="text-4xl font-black">{misPuntos}</p>
+                                        
+                                        <div className="flex sm:flex-col gap-4">
+                                            <div className="flex-1 bg-brand-dark text-brand-bg1 p-4 rounded-2xl flex flex-col justify-center items-center shadow-xl">
+                                                <Trophy className="w-5 h-5 mb-1 opacity-70" />
+                                                <p className="text-[10px] font-black opacity-60 uppercase tracking-wider">Puntos</p>
+                                                <p className="text-2xl font-black">{misPuntos}</p>
+                                            </div>
+                                            <div className="flex-1 bg-orange-500 text-white p-4 rounded-2xl flex flex-col justify-center items-center shadow-xl">
+                                                <Flame className="w-5 h-5 mb-1 opacity-90" />
+                                                <p className="text-[10px] font-black opacity-80 uppercase tracking-wider">Racha</p>
+                                                <p className="text-2xl font-black">{userStreak}</p>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    {user.status.trim().toLowerCase() === 'activo' && retosList.length > 0 && (
+                                    {String(user.status || '').trim().toLowerCase() === 'activo' && activeChallenges.length > 0 && (
                                         <div className="mt-8 space-y-4">
-                                            <div className="flex items-center gap-2 px-2"><Target className="w-5 h-5 text-brand-dark/70"/><h3 className="font-black uppercase text-lg">Retos Activos</h3></div>
-                                            {retosList.map((reto, idx) => (
-                                                <div key={idx} className="glass-card p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 group hover:bg-white/50 transition-colors border border-white/50">
-                                                    <div>
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <h4 className="font-black text-brand-dark uppercase">{reto.Titulo}</h4>
-                                                            <span className="bg-brand-dark text-brand-bg1 text-[10px] px-2 py-0.5 rounded-full font-black">+{reto.Puntos} PTS</span>
-                                                        </div>
-                                                        <p className="text-sm font-medium text-brand-dark/70">{reto.Descripcion}</p>
-                                                    </div>
-                                                    <button onClick={() => window.open(reto['Red Social'] === 'WhatsApp' ? 'https://wa.me/?text=¡Cumpliendo%20mi%20reto%20en%20Elements%20Box!' : 'https://google.com', '_blank')} className="shrink-0 bg-brand-dark text-brand-bg1 px-5 py-3 rounded-xl font-black text-xs uppercase hover:scale-105 transition-transform shadow-lg">
-                                                        Cumplir en {reto['Red Social']}
-                                                    </button>
+                                            <div className="flex items-center gap-2 px-2"><Target className="w-5 h-5 text-brand-dark/70"/><h3 className="font-black uppercase text-lg">Retos Vigentes</h3></div>
+                                            
+                                            {/* TABLA COMPACTA DE RETOS CON LÓGICA INTELIGENTE */}
+                                            <div className="glass-card rounded-[1.5rem] p-4 sm:p-6 border border-white/40 overflow-hidden shadow-sm">
+                                                <div className="space-y-3">
+                                                    {activeChallenges.map((reto, idx) => {
+                                                        const titulo = String(reto.Titulo).toLowerCase();
+                                                        const esVideo = titulo.includes('video');
+                                                        const esRacha = titulo.includes('racha') || titulo.includes('conexión');
+                                                        const esAutomatico = esVideo || esRacha;
+
+                                                        let percent = 0; let color = 'bg-brand-dark/20'; let textoProgreso = ''; let accionUi = null;
+                                                        const miEvidencia = evidenciasList.find(e => e.Reto === reto.Titulo);
+
+                                                        if(esVideo) {
+                                                            const totalVideos = videos.length;
+                                                            const vistos = evidenciasList.filter(e => e.Reto === reto.Titulo && e.Estado === 'Aprobado').length;
+                                                            percent = totalVideos > 0 ? (vistos / totalVideos) * 100 : 0;
+                                                            textoProgreso = `${vistos}/${totalVideos} Videos`;
+                                                            color = percent === 100 ? 'bg-green-500' : 'bg-blue-500';
+                                                            accionUi = <span className="text-[10px] font-bold text-brand-dark/50 bg-white px-2 py-1 rounded border border-brand-dark/10">Academia</span>;
+                                                        } else if (esRacha) {
+                                                            const metaDias = titulo.includes('semanal') ? 7 : (titulo.includes('mensual') ? 30 : 2);
+                                                            percent = (userStreak / metaDias) * 100;
+                                                            if(percent > 100) percent = 100;
+                                                            textoProgreso = `${userStreak}/${metaDias} Días`;
+                                                            color = percent === 100 ? 'bg-green-500' : 'bg-orange-500';
+                                                            accionUi = <span className="text-[10px] font-bold text-brand-dark/50 bg-white px-2 py-1 rounded border border-brand-dark/10">Automático</span>;
+                                                        } else {
+                                                            const estado = miEvidencia ? miEvidencia.Estado : 'Sin Hacer';
+                                                            const obs = miEvidencia ? miEvidencia.Observacion : '';
+                                                            
+                                                            if(estado === 'Aprobado') { percent = 100; color = 'bg-green-500'; textoProgreso = 'Aprobado'; }
+                                                            else if(estado === 'Pendiente') { percent = 50; color = 'bg-yellow-500'; textoProgreso = 'En revisión'; }
+                                                            else if(estado === 'Rechazado') { percent = 10; color = 'bg-red-500'; textoProgreso = 'Rechazado'; }
+                                                            else { textoProgreso = 'Pendiente'; }
+
+                                                            if (estado === 'Sin Hacer' || estado === 'Rechazado') {
+                                                                accionUi = (
+                                                                    <div className="flex flex-col gap-1 items-end w-full sm:w-auto">
+                                                                        <button onClick={() => setUploadingReto(reto)} className="bg-brand-dark text-brand-bg1 px-3 py-1.5 rounded-lg font-black text-[10px] uppercase shadow-md flex items-center justify-center gap-1 hover:scale-105 transition-transform w-full sm:w-auto">
+                                                                            <Upload className="w-3 h-3"/> Adjuntar
+                                                                        </button>
+                                                                        {obs && <p className="text-[9px] font-bold text-red-600 mt-1 max-w-[150px] leading-tight text-right break-words"><Info className="inline w-3 h-3"/> {obs}</p>}
+                                                                    </div>
+                                                                );
+                                                            } else {
+                                                                accionUi = estado === 'Aprobado' ? <CheckCircle className="w-5 h-5 text-green-500" /> : <Clock className="w-5 h-5 text-yellow-500" />;
+                                                            }
+                                                        }
+
+                                                        return (
+                                                            <div key={idx} className="bg-white/50 p-3 rounded-2xl border border-brand-dark/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-white transition-colors">
+                                                                <div className="flex-1 w-full">
+                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                        <h4 className="font-black text-sm text-brand-dark uppercase truncate">{reto.Titulo}</h4>
+                                                                        <span className="text-[9px] font-black text-brand-bg1 bg-brand-dark px-2 py-0.5 rounded-md whitespace-nowrap">+{reto.Puntos} pts</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2 mt-2">
+                                                                        <div className="flex-1 h-1.5 bg-brand-dark/10 rounded-full overflow-hidden">
+                                                                            <div className={`h-full ${color} transition-all duration-1000`} style={{width: `${percent}%`}}></div>
+                                                                        </div>
+                                                                        <span className={`text-[10px] font-black uppercase w-20 text-right text-brand-dark/60`}>
+                                                                            {textoProgreso}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="shrink-0 w-full sm:w-auto flex justify-end items-center mt-2 sm:mt-0">
+                                                                    {accionUi}
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    })}
                                                 </div>
-                                            ))}
+                                            </div>
                                         </div>
                                     )}
                                     
-                                    {user.status.trim().toLowerCase() !== 'activo' && (
-                                        <div className="bg-brand-dark/5 p-4 rounded-2xl flex items-start gap-3 mt-2">
+                                    {String(user.status || '').trim().toLowerCase() !== 'activo' && (
+                                        <div className="bg-brand-dark/5 p-4 rounded-2xl flex items-start gap-3 mt-2 border border-brand-dark/10">
                                             <Lock className="w-5 h-5 text-brand-dark/60 shrink-0 mt-0.5" />
                                             <p className="text-sm font-bold text-brand-dark/80 leading-relaxed">Tu cuenta no está activa. Renueva en recepción para acceder a retos, videos de academia y sumarte al ranking.</p>
                                         </div>
@@ -537,8 +683,9 @@ export default function App() {
                                 </div>
                             )}
 
-                            {currentView === 'academy' && (
-                                <div className="space-y-6">
+                            {/* ACADEMIA */}
+                            {user && currentView === 'academy' && (
+                                <div className="animate-slide-up space-y-6">
                                     <div className="px-2">
                                         <h2 className="text-4xl font-black uppercase leading-none mt-1">Academia</h2>
                                         <p className="text-sm font-bold text-brand-dark/50 mt-2">Domina tu técnica</p>
@@ -559,13 +706,26 @@ export default function App() {
                                                         {expandedCategories[category] ? <ChevronUp className="w-5 h-5 opacity-50"/> : <ChevronDown className="w-5 h-5 opacity-50"/>}
                                                     </button>
                                                     {expandedCategories[category] && (
-                                                        <div className="p-4 grid grid-cols-1 gap-4 bg-black/5 animate-fade-in border-t border-white/20">
+                                                        <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-6 bg-black/5 animate-fade-in border-t border-white/20">
                                                             {groupedFilteredVideos[category].map((vid, vIdx) => {
                                                                 const videoInfo = getVideoData(vid.URL || '');
                                                                 return (
-                                                                    <div key={vIdx} onClick={() => setSelectedVideo(videoInfo)} className="bg-white rounded-2xl p-4 flex items-center gap-4 shadow-sm cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all">
-                                                                        <div className="w-16 h-16 shrink-0 bg-brand-dark/10 rounded-xl flex items-center justify-center relative overflow-hidden group"><Play className="w-6 h-6 text-brand-dark group-hover:scale-125 transition-transform" /></div>
-                                                                        <div><h4 className="font-black text-lg leading-tight uppercase mb-1">{vid.Nombre}</h4><p className="text-xs text-brand-dark/60 font-bold line-clamp-1">{vid.Descripcion}</p></div>
+                                                                    <div key={vIdx} onClick={() => setSelectedVideo(videoInfo)} className="bg-white rounded-3xl overflow-hidden shadow-sm cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-brand-dark/5 flex flex-col group">
+                                                                        <div className="relative aspect-video bg-brand-dark flex items-center justify-center overflow-hidden">
+                                                                            {videoInfo.type === 'youtube' ? (
+                                                                                <img src={`https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`} className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500 group-hover:scale-105" alt={vid.Nombre} />
+                                                                            ) : (
+                                                                                <Video className="w-12 h-12 text-white/30" />
+                                                                            )}
+                                                                            <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors duration-300"></div>
+                                                                            <div className="relative z-10 w-16 h-16 bg-brand-bg1/95 rounded-full flex items-center justify-center shadow-xl backdrop-blur-md group-hover:scale-110 group-hover:bg-brand-bg1 transition-all duration-300">
+                                                                                <Play className="w-8 h-8 text-brand-dark translate-x-0.5" />
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="p-5 flex-1 flex flex-col">
+                                                                            <h4 className="font-black text-xl leading-tight uppercase mb-2 text-brand-dark">{vid.Nombre}</h4>
+                                                                            <p className="text-sm text-brand-dark/70 font-medium line-clamp-2 mt-auto">{vid.Descripcion}</p>
+                                                                        </div>
                                                                     </div>
                                                                 )
                                                             })}
@@ -578,8 +738,9 @@ export default function App() {
                                 </div>
                             )}
 
-                            {currentView === 'blog' && (
-                                <div className="space-y-6">
+                            {/* BLOG */}
+                            {user && currentView === 'blog' && (
+                                <div className="animate-slide-up space-y-6">
                                     <div className="px-2">
                                         <h2 className="text-4xl font-black uppercase leading-none mt-1">Blog Box</h2>
                                         <p className="text-sm font-bold text-brand-dark/50 mt-2">Noticias y Comunidad</p>
@@ -615,8 +776,9 @@ export default function App() {
                                 </div>
                             )}
 
-                            {currentView === 'ranking' && (
-                                <div className="space-y-6">
+                            {/* RANKING */}
+                            {user && currentView === 'ranking' && (
+                                <div className="animate-slide-up space-y-6">
                                     <div className="px-2">
                                         <h2 className="text-4xl font-black uppercase leading-none mt-1">Leaderboard</h2>
                                         <p className="text-sm font-bold text-brand-dark/50 mt-2">Puntuación por Asistencia y Retos</p>
@@ -632,7 +794,7 @@ export default function App() {
                                             </thead>
                                             <tbody className="text-sm">
                                                 {dataLoading ? <tr><td colSpan="3"><Loader/></td></tr> : 
-                                                    [...rankingList].sort((a,b) => (b.Puntos || 0) - (a.Puntos || 0)).map((r, idx) => (
+                                                    [...rankingList].sort((a,b) => (Number(b.Puntos) || 0) - (Number(a.Puntos) || 0)).map((r, idx) => (
                                                         <tr key={idx} className={`border-b border-white/30 transition-colors ${idx === 0 ? 'bg-yellow-500/20' : 'hover:bg-white/50'}`}>
                                                             <td className="p-4 pl-6 text-center font-black text-xl text-brand-dark/40">#{idx + 1}</td>
                                                             <td className="p-4 font-black uppercase">{r.Nombre || r.Nombres} {idx===0 && '🏆'}</td>
@@ -646,65 +808,125 @@ export default function App() {
                                 </div>
                             )}
 
-                            {currentView === 'admin' && user?.role === 'admin' && (
-                                <div className="space-y-6">
+                            {/* PANEL ADMIN */}
+                            {user && currentView === 'admin' && user?.role === 'admin' && (
+                                <div className="animate-slide-up space-y-6">
                                     <div className="px-2"><h2 className="text-4xl font-black uppercase leading-none mt-1">Panel Admin</h2></div>
                                     <div className="flex gap-2 overflow-x-auto hide-scroll px-2 pb-2">
-                                        {['atletas', 'blog', 'retos'].map(tab => (
-                                            <button key={tab} onClick={() => setAdminTab(tab)} className={`px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${adminTab === tab ? 'bg-brand-dark text-brand-bg1 shadow-lg' : 'glass-card text-brand-dark hover:bg-white'}`}>{tab}</button>
-                                        ))}
+                                        <button onClick={() => setAdminTab('evidencias')} className={`shrink-0 px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'evidencias' ? 'bg-brand-dark text-brand-bg1 shadow-lg' : 'glass-card text-brand-dark hover:bg-white'}`}>Validar Evidencias</button>
+                                        <button onClick={() => setAdminTab('baseDatos')} className={`shrink-0 px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'baseDatos' ? 'bg-brand-dark text-brand-bg1 shadow-lg' : 'glass-card text-brand-dark hover:bg-white'}`}>Base de Datos</button>
+                                        <button onClick={() => setAdminTab('blog')} className={`shrink-0 px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'blog' ? 'bg-brand-dark text-brand-bg1 shadow-lg' : 'glass-card text-brand-dark hover:bg-white'}`}>Nuevo Blog</button>
                                     </div>
-                                    {errorMsg && <div className="bg-red-500/10 text-red-700 p-3 rounded-xl text-sm font-bold text-center border border-red-500/20">{errorMsg}</div>}
-                                    {successMsg && <div className="bg-green-500/10 text-green-700 p-3 rounded-xl text-sm font-bold text-center border border-green-500/20">{successMsg}</div>}
 
-                                    {adminTab === 'atletas' && (
-                                        dataLoading ? <div className="flex justify-center"><div className="w-10 h-10 border-4 border-brand-dark border-t-transparent rounded-full animate-spin"></div></div> : (
-                                            ['Aspirante', 'Activo', 'Inactivo'].map((categoria) => {
-                                                const atletas = usersList.filter(u => String(u.Estado || '').trim().toLowerCase() === categoria.toLowerCase() || (categoria==='Aspirante' && !String(u.Estado || '').trim()));
-                                                if(atletas.length === 0) return null;
-                                                return (
-                                                    <div key={categoria} className="glass-card rounded-[2rem] overflow-hidden mb-6 border border-white/40">
-                                                        <div className={`p-4 font-black uppercase text-sm flex justify-between items-center ${categoria==='Activo'?'bg-green-500/10 text-green-900':categoria==='Aspirante'?'bg-yellow-500/10 text-yellow-900':'bg-red-500/10 text-red-900'}`}>
-                                                            <span>{categoria}s</span><span className="bg-white/50 px-2 py-1 rounded-full text-xs shadow-sm">{atletas.length}</span>
-                                                        </div>
-                                                        <div className="overflow-x-auto p-2">
-                                                            <table className="w-full text-left border-collapse whitespace-nowrap">
-                                                                <tbody className="text-sm">
-                                                                    {atletas.map((u, idx) => (
-                                                                        <tr key={idx} className="border-b border-brand-dark/5 hover:bg-white/30 transition-colors">
-                                                                            <td className="p-3">
-                                                                                <p className="font-black text-brand-dark">{u.Nombres || u.Nombre} {u.Apellidos}</p>
-                                                                                <p className="text-[10px] text-brand-dark/50 mb-1">{u.Correo}</p>
-                                                                                {getDiasBadge(u)}
-                                                                            </td>
-                                                                            <td className="p-3 font-bold text-xs">{u.Plan || '-'}</td>
-                                                                            <td className="p-3 text-right"><button onClick={() => openEditModal(u)} className="bg-brand-dark text-brand-bg1 px-4 py-2 rounded-xl text-xs font-black uppercase shadow-md hover:scale-105">Editar</button></td>
-                                                                        </tr>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })
-                                        )
+                                    {/* SUPER GESTOR DINÁMICO */}
+                                    {adminTab === 'baseDatos' && (
+                                        <div className="glass-card p-6 rounded-[2rem] border border-white/40">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                                                <h3 className="text-xl font-black flex items-center gap-2"><Database className="w-5 h-5"/> Editor Universal</h3>
+                                                <select value={selectedAdminSheet} onChange={(e) => { setSelectedAdminSheet(e.target.value); fetchAdminSheetData(e.target.value); }} className="p-3 rounded-xl bg-white font-bold outline-none border border-brand-dark/20 text-brand-dark text-sm cursor-pointer shadow-sm">
+                                                    {adminDataSheets.map(s => <option key={s} value={s}>{s}</option>)}
+                                                </select>
+                                            </div>
+                                            
+                                            {dataLoading ? <Loader /> : (
+                                                <div className="overflow-x-auto rounded-xl border border-brand-dark/10 bg-white/30">
+                                                    {adminSheetData.length > 0 ? (
+                                                        <table className="w-full text-left border-collapse whitespace-nowrap">
+                                                            <thead>
+                                                                <tr className="bg-brand-dark/5 text-[10px] uppercase font-black tracking-widest text-brand-dark/70 border-b border-brand-dark/10">
+                                                                    <th className="p-3">Acción</th>
+                                                                    {Object.keys(adminSheetData[0]).filter(k => k !== '_rowIndex').map((k, i) => <th key={i} className="p-3">{k}</th>)}
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="text-sm">
+                                                                {adminSheetData.map((row, idx) => (
+                                                                    <tr key={idx} className="border-b border-brand-dark/5 hover:bg-white/50 transition-colors">
+                                                                        <td className="p-2"><button onClick={() => setEditingGenericRow(row)} className="bg-brand-dark text-brand-bg1 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase shadow-md hover:scale-105">Editar</button></td>
+                                                                        {Object.keys(row).filter(k => k !== '_rowIndex').map((k, i) => (
+                                                                            <td key={i} className="p-3 max-w-[200px] truncate text-brand-dark font-medium">{String(row[k] || '')}</td>
+                                                                        ))}
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    ) : <div className="p-6 text-center font-bold text-brand-dark/50">No hay datos en esta pestaña.</div>}
+                                                </div>
+                                            )}
+                                        </div>
                                     )}
 
+                                    {/* VALIDACIÓN DE EVIDENCIAS */}
+                                    {adminTab === 'evidencias' && (
+                                        <div className="glass-card p-6 rounded-[2rem] border border-white/40">
+                                            <h3 className="text-xl font-black flex items-center gap-2 mb-6"><CheckCircle className="w-5 h-5"/> Retos Pendientes</h3>
+                                            
+                                            {adminEvalEvidencia ? (
+                                                <div className="animate-fade-in bg-white/60 p-6 rounded-2xl border border-brand-dark/10">
+                                                    <button onClick={() => setAdminEvalEvidencia(null)} className="text-[10px] font-black uppercase text-brand-dark/50 hover:text-brand-dark mb-4 flex items-center gap-1"><X className="w-3 h-3"/> Volver</button>
+                                                    <h4 className="font-black text-xl mb-1">{adminEvalEvidencia.Reto}</h4>
+                                                    <p className="text-sm font-bold text-brand-dark/70 mb-4">{adminEvalEvidencia.Correo}</p>
+                                                    
+                                                    {adminEvalEvidencia.URL_Evidencia && (
+                                                        <div className="mb-6 rounded-xl overflow-hidden text-center flex flex-col items-center">
+                                                            <a href={adminEvalEvidencia.URL_Evidencia} target="_blank" rel="noopener noreferrer" className="bg-blue-100 text-blue-700 px-6 py-3 rounded-full font-black text-xs uppercase hover:bg-blue-200 transition-colors flex items-center gap-2 shadow-sm border border-blue-200">
+                                                                Ver Evidencia Completa
+                                                            </a>
+                                                            <p className="text-[10px] mt-2 text-brand-dark/50">Si es un video, abrirá en una pestaña nueva.</p>
+                                                        </div>
+                                                    )}
+
+                                                    <form onSubmit={handleAdminValidateEvidence} className="space-y-4">
+                                                        <div>
+                                                            <label className="block text-[10px] font-black uppercase mb-1">Observación al Atleta (Opcional)</label>
+                                                            <select name="observacion" className="w-full p-3 rounded-xl bg-white font-bold outline-none border border-brand-dark/10 shadow-sm text-sm">
+                                                                <option value="">-- Sin Observaciones --</option>
+                                                                {opcionesObservacion.map((o, i) => <option key={i} value={o}>{o}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-3 pt-4 border-t border-brand-dark/10">
+                                                            <button type="submit" name="decision" value="Rechazado" disabled={loading} className="w-full bg-red-100 text-red-700 p-4 rounded-xl font-black uppercase hover:bg-red-200 transition-colors shadow-sm">{loading ? '...' : 'Rechazar'}</button>
+                                                            <button type="submit" name="decision" value="Aprobado" disabled={loading} className="w-full bg-green-500 text-white p-4 rounded-xl font-black uppercase hover:bg-green-600 transition-colors shadow-md">{loading ? '...' : `Aprobar (+${adminEvalEvidencia.Puntos})`}</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-4">
+                                                    {adminEvidencias.filter(e => e.Estado === 'Pendiente').length === 0 ? (
+                                                        <p className="text-center font-bold text-brand-dark/50 py-4">No hay evidencias pendientes por revisar.</p>
+                                                    ) : (
+                                                        adminEvidencias.filter(e => e.Estado === 'Pendiente').map((ev, i) => (
+                                                            <div key={i} className="bg-white/60 p-4 rounded-2xl border border-brand-dark/10 flex justify-between items-center shadow-sm">
+                                                                <div>
+                                                                    <p className="text-xs font-black uppercase text-brand-dark/50 mb-1">{ev.Fecha}</p>
+                                                                    <p className="font-black text-brand-dark">{ev.Reto} <span className="text-[10px] bg-yellow-100 text-yellow-800 px-2 rounded-full ml-1">+{ev.Puntos}</span></p>
+                                                                    <p className="text-xs font-bold text-brand-dark/70">{ev.Correo}</p>
+                                                                </div>
+                                                                <button onClick={() => setAdminEvalEvidencia(ev)} className="bg-brand-dark text-brand-bg1 px-4 py-2 rounded-xl font-black text-xs uppercase shadow-md hover:scale-105">Evaluar</button>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* BLOG ADMIN CORREGIDO */}
                                     {adminTab === 'blog' && (
                                         <div className="glass-card p-6 rounded-[2rem] border border-white/40">
                                             <h3 className="text-xl font-black mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5"/> Publicar Noticia</h3>
                                             <form onSubmit={handleAdminAddBlog} className="space-y-4">
-                                                <div><label className="block text-[10px] font-black uppercase mb-1">Título</label><input name="titulo" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold" /></div>
+                                                <div><label className="block text-[10px] font-black uppercase mb-1">Título</label><input type="text" name="titulo" required className="w-full p-3.5 rounded-xl bg-white/50 focus:bg-white outline-none font-bold text-sm" /></div>
                                                 <div className="grid grid-cols-2 gap-4">
-                                                    <div><label className="block text-[10px] font-black uppercase mb-1">Etiqueta (Ej: Evento)</label><input name="etiqueta" required className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none" /></div>
-                                                    <div><label className="block text-[10px] font-black uppercase mb-1">Autor</label><input name="autor" className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none" placeholder="Elements" /></div>
+                                                    <div><label className="block text-[10px] font-black uppercase mb-1">Etiqueta (Ej: Evento)</label><input type="text" name="etiqueta" required className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none text-sm" /></div>
+                                                    <div><label className="block text-[10px] font-black uppercase mb-1">Autor</label><input type="text" name="autor" className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none text-sm" placeholder="Elements" /></div>
                                                 </div>
-                                                <div><label className="block text-[10px] font-black uppercase mb-1">Resumen</label><textarea name="descCorta" required rows="2" className="w-full p-3.5 rounded-xl bg-white/50 outline-none font-medium resize-none" /></div>
-                                                <div><label className="block text-[10px] font-black uppercase mb-1">Contenido Completo</label><textarea name="contenido" required rows="4" className="w-full p-3.5 rounded-xl bg-white/50 outline-none font-medium resize-none" /></div>
+                                                {/* Eliminado el parámetro erróneo rows que causaba el quiebre */}
+                                                <div><label className="block text-[10px] font-black uppercase mb-1">Resumen</label><textarea name="descCorta" required className="w-full p-3.5 rounded-xl bg-white/50 outline-none font-medium resize-none text-sm h-20"></textarea></div>
+                                                <div><label className="block text-[10px] font-black uppercase mb-1">Contenido Completo</label><textarea name="contenido" required className="w-full p-3.5 rounded-xl bg-white/50 outline-none font-medium resize-none text-sm h-32"></textarea></div>
                                                 <div>
                                                     <label className="block text-[10px] font-black uppercase mb-1 text-brand-dark/80">Subir Imagen a Drive</label>
                                                     <div className="relative w-full p-4 rounded-xl bg-white/50 border-2 border-dashed border-brand-dark/30 hover:border-brand-dark transition-colors flex items-center justify-center gap-2 font-black cursor-pointer uppercase text-xs tracking-wider">
-                                                        <ImageIcon className="w-5 h-5" /> Escoger Foto
+                                                        <Camera className="w-5 h-5" /> Escoger Foto
                                                         <input type="file" name="imagen" accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                                                     </div>
                                                 </div>
@@ -713,166 +935,115 @@ export default function App() {
                                         </div>
                                     )}
 
-                                    {adminTab === 'retos' && (
-                                        <div className="glass-card p-6 rounded-[2rem] border border-white/40">
-                                            <h3 className="text-xl font-black mb-4 flex items-center gap-2"><Target className="w-5 h-5"/> Crear Reto Social</h3>
-                                            <form onSubmit={handleAdminAddReto} className="space-y-4">
-                                                <div><label className="block text-[10px] font-black uppercase mb-1">Título</label><input name="titulo" required className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none" placeholder="Foto Entrenando" /></div>
-                                                <div><label className="block text-[10px] font-black uppercase mb-1">Descripción</label><textarea name="descripcion" required rows="2" className="w-full p-3.5 rounded-xl bg-white/50 font-medium outline-none resize-none" /></div>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div>
-                                                        <label className="block text-[10px] font-black uppercase mb-1">Red Social</label>
-                                                        <select name="redSocial" className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none">
-                                                            <option>Instagram</option><option>Facebook</option><option>WhatsApp</option><option>X</option>
-                                                        </select>
-                                                    </div>
-                                                    <div><label className="block text-[10px] font-black uppercase mb-1">Puntos</label><input type="number" name="puntos" required className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none" placeholder="10" /></div>
-                                                </div>
-                                                <button type="submit" disabled={loading} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black uppercase mt-4 hover:scale-[1.02] shadow-xl">{loading ? 'Procesando...' : 'Activar Reto'}</button>
-                                            </form>
-                                        </div>
-                                    )}
                                 </div>
                             )}
 
-                        </div>
-                    )}
+                            {user && <BottomNav />}
 
-                    {user && <BottomNav />}
-
-                    {/* MODAL EDICIÓN ADMIN */}
-                    {editingUser && (
-                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in">
-                            <div className="bg-[#f0e3d1] w-full max-w-md rounded-[2.5rem] p-6 shadow-2xl relative animate-zoom-in max-h-[90vh] overflow-y-auto hide-scroll border border-white/20">
-                                <h3 className="text-2xl font-black uppercase mb-1 text-center text-brand-dark">Editar Atleta</h3>
-                                <p className="font-bold text-brand-dark/60 mb-6 text-center">{editingUser.Nombres || editingUser.Nombre} {editingUser.Apellidos}</p>
-                                
-                                <form onSubmit={handleAdminUpdateUser} className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Nombres</label><input name="nombres" defaultValue={editingUser.Nombres} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-bold text-brand-dark" /></div>
-                                        <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Apellidos</label><input name="apellidos" defaultValue={editingUser.Apellidos} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-bold text-brand-dark" /></div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Cédula</label><input name="cedula" defaultValue={editingUser.Cedula} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-bold text-brand-dark" /></div>
-                                        <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Teléfono</label><input name="telefono" defaultValue={editingUser.Telefono} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-bold text-brand-dark" /></div>
-                                    </div>
-                                    
-                                    <div className="p-4 bg-white/40 rounded-2xl border border-white/60 space-y-4 mt-2">
-                                        <div className="flex gap-2">
-                                            <button type="button" onClick={()=>setPlanTypeSelection('elementa')} className={`flex-1 py-2 rounded-lg text-xs font-black uppercase transition-colors ${planTypeSelection==='elementa' ? 'bg-brand-dark text-brand-bg1' : 'bg-white/50 text-brand-dark/50'}`}>Elementa</button>
-                                            <button type="button" onClick={()=>setPlanTypeSelection('antiguos')} className={`flex-1 py-2 rounded-lg text-xs font-black uppercase transition-colors ${planTypeSelection==='antiguos' ? 'bg-brand-dark text-brand-bg1' : 'bg-white/50 text-brand-dark/50'}`}>Antiguos</button>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Plan</label>
-                                            <select name="plan" value={editingUser.Plan || ''} onChange={(e) => {
-                                                const np = e.target.value;
-                                                setEditingUser({...editingUser, Plan: np, 'Fecha de Caducidad': calculateAutoExpiry(editingUser['Fecha Ingreso'], np, planTypeSelection)});
-                                            }} className="w-full p-3 rounded-xl bg-white font-bold outline-none shadow-sm text-brand-dark">
-                                                <option value="">Seleccionar plan...</option>
-                                                {planesList[planTypeSelection]?.map((p, i) => <option key={i} value={p.plan}>{p.plan} - ${p.costo}</option>)}
-                                            </select>
-                                        </div>
-
-                                        {String(editingUser.Plan || '').includes('Parejas') && (
-                                            <div className="animate-fade-in">
-                                                <label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Vincular Atleta</label>
-                                                <select name="pareja" className="w-full p-3 rounded-xl bg-white font-bold outline-none border-2 border-brand-dark text-brand-dark">
-                                                    <option value="">No vincular a nadie</option>
-                                                    {usersList.filter(u => u.Correo !== editingUser.Correo).map((u, i) => <option key={i} value={u.Correo}>{u.Nombres || u.Nombre} - {u.Correo}</option>)}
-                                                </select>
-                                            </div>
-                                        )}
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Ingreso</label><input type="date" name="ingreso" value={editingUser['Fecha Ingreso']} onChange={(e) => setEditingUser({...editingUser, 'Fecha Ingreso': e.target.value, 'Fecha de Caducidad': calculateAutoExpiry(e.target.value, editingUser.Plan, planTypeSelection)})} className="w-full p-3 rounded-xl bg-white font-bold text-xs shadow-sm text-brand-dark" /></div>
-                                            
-                                            {String(editingUser.Plan || '').includes('12 Clases') ? (
-                                                <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Clases Restantes</label><input type="number" name="clases" defaultValue={editingUser['Días Restantes'] || 12} className="w-full p-3 rounded-xl bg-white font-black text-brand-dark border-2 border-brand-dark text-center shadow-sm" /></div>
-                                            ) : (
-                                                <div><label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Caducidad</label><input type="date" name="caducidad" value={editingUser['Fecha de Caducidad']} onChange={(e) => setEditingUser({...editingUser, 'Fecha de Caducidad': e.target.value})} className="w-full p-3 rounded-xl bg-white font-bold text-xs shadow-sm text-brand-dark" /></div>
-                                            )}
-                                        </div>
+                            {/* MODAL UPLOAD RETO CON PREVIEW */}
+                            {uploadingReto && (
+                                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in">
+                                    <div className="bg-[#f0e3d1] w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl relative animate-zoom-in border border-white/20">
+                                        <button type="button" onClick={() => {setUploadingReto(null); setPreviewImgUrl(null);}} className="absolute top-4 right-4 bg-brand-dark/10 text-brand-dark p-2 rounded-full hover:bg-brand-dark/20"><X className="w-4 h-4" /></button>
+                                        <h3 className="text-xl font-black uppercase mb-2 text-center text-brand-dark">Evidencia</h3>
+                                        <p className="text-xs font-bold text-brand-dark/60 mb-6 text-center leading-tight">{uploadingReto.Titulo}</p>
                                         
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Estado</label>
-                                            <select name="estado" defaultValue={editingUser.Estado} className="w-full p-3 rounded-xl bg-white font-black uppercase text-center shadow-sm text-brand-dark">
-                                                <option value="Activo">Activo</option><option value="Inactivo">Inactivo</option><option value="Aspirante">Aspirante</option>
-                                            </select>
-                                        </div>
+                                        <form onSubmit={handleEvidenceSubmit} className="space-y-4">
+                                            {previewImgUrl ? (
+                                                <div className="w-full flex flex-col items-center gap-3">
+                                                    <div className="w-full h-40 bg-black/5 rounded-2xl border border-black/10 overflow-hidden flex items-center justify-center relative group">
+                                                        <img src={previewImgUrl} className="max-w-full max-h-full object-contain" />
+                                                        <button type="button" onClick={() => setPreviewImgUrl(null)} className="absolute inset-0 bg-black/50 text-white font-black text-xs uppercase opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">Cambiar Archivo</button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="relative w-full h-32 rounded-2xl bg-white/60 border-2 border-dashed border-brand-dark/30 hover:border-brand-dark transition-colors flex flex-col items-center justify-center gap-2 font-black cursor-pointer uppercase text-xs tracking-wider">
+                                                    <Camera className="w-8 h-8 text-brand-dark/50" />
+                                                    <span className="text-brand-dark/50 text-center px-4">Selecciona foto o video</span>
+                                                    <input type="file" name="imagen" accept="image/*,video/*" required onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                                </div>
+                                            )}
+                                            
+                                            <button type="submit" disabled={loading || !previewImgUrl} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black uppercase hover:scale-105 shadow-xl transition-transform disabled:opacity-50">{loading ? 'Enviando...' : 'Enviar a Revisión'}</button>
+                                        </form>
                                     </div>
+                                </div>
+                            )}
 
-                                    <div className="flex gap-3 mt-8">
-                                        <button type="button" onClick={() => setEditingUser(null)} className="flex-1 bg-white/60 p-4 rounded-xl font-black uppercase text-brand-dark/70 hover:bg-white transition-colors">Cancelar</button>
-                                        <button type="submit" disabled={loading} className="flex-1 bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black uppercase hover:scale-105 shadow-xl transition-transform">{loading ? '...' : 'Guardar'}</button>
+                            {/* MODAL GESTOR DINÁMICO ADMIN */}
+                            {editingGenericRow && (
+                                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in">
+                                    <div className="bg-[#f0e3d1] w-full max-w-md rounded-[2.5rem] p-6 shadow-2xl relative animate-zoom-in max-h-[90vh] overflow-y-auto hide-scroll border border-white/20">
+                                        <h3 className="text-xl font-black uppercase mb-1 text-center text-brand-dark flex items-center justify-center gap-2"><Database className="w-5 h-5"/> Editor Universal</h3>
+                                        <p className="font-bold text-brand-dark/60 mb-6 text-center text-xs">Pestaña: {selectedAdminSheet} | Fila: {editingGenericRow._rowIndex}</p>
+                                        
+                                        <form onSubmit={handleGenericUpdate} className="space-y-3">
+                                            {Object.keys(editingGenericRow).filter(k => k !== '_rowIndex').map((k, i) => (
+                                                <div key={i}>
+                                                    <label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">{k}</label>
+                                                    <input name={k} defaultValue={editingGenericRow[k]} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-medium text-sm text-brand-dark border border-brand-dark/5" />
+                                                </div>
+                                            ))}
+                                            <div className="flex gap-3 mt-6 pt-4 border-t border-brand-dark/10">
+                                                <button type="button" onClick={() => setEditingGenericRow(null)} className="flex-1 bg-white/60 p-4 rounded-xl font-black uppercase text-brand-dark/70 hover:bg-white transition-colors text-xs">Cancelar</button>
+                                                <button type="submit" disabled={loading} className="flex-1 bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black uppercase hover:scale-105 shadow-xl transition-transform text-xs">{loading ? '...' : 'Guardar Fila'}</button>
+                                            </div>
+                                        </form>
                                     </div>
-                                </form>
-                            </div>
-                        </div>
-                    )}
+                                </div>
+                            )}
 
-                    {/* MODAL DETALLE DE BLOG */}
-                    {selectedPost && (
-                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-0 sm:p-6 modal-overlay animate-fade-in" onClick={() => setSelectedPost(null)}>
-                            <div className="bg-brand-bg1 w-full h-full sm:max-h-[90vh] sm:max-w-4xl sm:rounded-[2.5rem] overflow-hidden shadow-2xl relative animate-zoom-in flex flex-col border border-white/10" onClick={e => e.stopPropagation()}>
-                                {/* AQUI ESTABA EL ERROR DE XIcon. Ahora es X */}
-                                <button onClick={() => setSelectedPost(null)} className="absolute top-4 right-4 z-30 bg-black/40 backdrop-blur-md text-white p-2 rounded-full shadow-lg hover:bg-black transition-colors"><X className="w-6 h-6" /></button>
-                                
-                                <div className="flex-1 overflow-y-auto hide-scroll bg-brand-bg1">
-                                    {selectedPost.cleanImg && (
-                                        <div className="w-full relative shadow-md">
-                                            <img src={selectedPost.cleanImg} className="w-full h-auto object-cover" alt="Detalle" />
-                                        </div>
-                                    )}
-                                    <div className={`p-6 sm:p-12 ${!selectedPost.cleanImg ? 'pt-20' : ''}`}>
-                                        <div className="flex gap-3 mb-5">
-                                            <span className="bg-brand-dark text-brand-bg1 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">{selectedPost.Etiqueta || 'Novedad'}</span>
-                                            <span className="text-brand-dark/60 text-xs font-bold uppercase py-1.5">{selectedPost.Fecha}</span>
-                                        </div>
-                                        <h2 className="text-4xl sm:text-5xl font-black text-brand-dark leading-tight mb-8 drop-shadow-sm">{selectedPost.Titulo}</h2>
-                                        <div className="text-brand-dark/90 font-medium leading-relaxed whitespace-pre-wrap text-base sm:text-lg">
-                                            {selectedPost.Contenido || selectedPost.Descripcion}
-                                        </div>
-                                        <div className="mt-12 pt-6 border-t border-brand-dark/10 flex items-center gap-4">
-                                            <div className="w-12 h-12 bg-brand-dark rounded-full flex items-center justify-center text-brand-bg1 font-black shadow-lg text-xl">{selectedPost.Autor ? selectedPost.Autor.charAt(0) : 'E'}</div>
-                                            <div><p className="text-[10px] uppercase font-black text-brand-dark/50 tracking-wider">Escrito por</p><p className="font-black text-lg">{selectedPost.Autor || 'Equipo Elements'}</p></div>
+                            {/* MODAL DETALLE DE BLOG */}
+                            {selectedPost && (
+                                <div className="fixed inset-0 z-[120] flex items-center justify-center p-0 sm:p-6 modal-overlay animate-fade-in" onClick={() => setSelectedPost(null)}>
+                                    <div className="bg-brand-bg1 w-full h-full sm:max-h-[90vh] sm:max-w-4xl sm:rounded-[2.5rem] overflow-hidden shadow-2xl relative animate-zoom-in flex flex-col border border-white/10" onClick={e => e.stopPropagation()}>
+                                        <button onClick={() => setSelectedPost(null)} className="absolute top-4 right-4 z-30 bg-black/40 backdrop-blur-md text-white p-2 rounded-full shadow-lg hover:bg-black transition-colors"><X className="w-6 h-6" /></button>
+                                        
+                                        <div className="flex-1 overflow-y-auto hide-scroll bg-brand-bg1">
+                                            {selectedPost.cleanImg && (
+                                                <div className="w-full relative shadow-md">
+                                                    <img src={selectedPost.cleanImg} className="w-full h-auto object-cover" alt="Detalle" />
+                                                </div>
+                                            )}
+                                            <div className={`p-6 sm:p-12 ${!selectedPost.cleanImg ? 'pt-20' : ''}`}>
+                                                <div className="flex gap-3 mb-5">
+                                                    <span className="bg-brand-dark text-brand-bg1 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">{selectedPost.Etiqueta || 'Novedad'}</span>
+                                                    <span className="text-brand-dark/60 text-xs font-bold uppercase py-1.5">{selectedPost.Fecha}</span>
+                                                </div>
+                                                <h2 className="text-4xl sm:text-5xl font-black text-brand-dark leading-tight mb-8 drop-shadow-sm">{selectedPost.Titulo}</h2>
+                                                <div className="text-brand-dark/90 font-medium leading-relaxed whitespace-pre-wrap text-base sm:text-lg">
+                                                    {selectedPost.Contenido || selectedPost.Descripcion}
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    )}
+                            )}
 
-                    {/* MODAL REPRODUCTOR DE VIDEO (FALTANTE) */}
-                    {selectedVideo && (
-                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in" onClick={() => setSelectedVideo(null)}>
-                            <div className="bg-black w-full max-w-4xl rounded-2xl overflow-hidden shadow-2xl relative aspect-video" onClick={e => e.stopPropagation()}>
-                                <button onClick={() => setSelectedVideo(null)} className="absolute top-4 right-4 z-30 bg-black/50 text-white p-2 rounded-full hover:bg-black transition-colors"><X className="w-6 h-6" /></button>
-                                {selectedVideo.type === 'youtube' && (
-                                    <iframe src={`https://www.youtube.com/embed/${selectedVideo.id}?autoplay=1`} className="w-full h-full border-0" allow="autoplay; fullscreen" title="Video Player"></iframe>
-                                )}
-                                {selectedVideo.type === 'drive' && (
-                                    <iframe src={`https://drive.google.com/file/d/${selectedVideo.id}/preview`} className="w-full h-full border-0" allow="autoplay; fullscreen" title="Drive Player"></iframe>
-                                )}
-                                {!selectedVideo.type && (
-                                    <div className="w-full h-full flex items-center justify-center text-white/50 font-bold">El video no está disponible o la URL no es válida.</div>
-                                )}
-                            </div>
+                            {/* MODAL REPRODUCTOR DE VIDEO CON COMPLETADO */}
+                            {selectedVideo && (
+                                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in" onClick={() => setSelectedVideo(null)}>
+                                    <div className="bg-black w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl relative aspect-video flex flex-col" onClick={e => e.stopPropagation()}>
+                                        <div className="absolute top-4 right-4 z-30 flex gap-2">
+                                            <button onClick={completeVideoChallenge} disabled={loading} className="bg-green-500/90 text-white px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-wider hover:bg-green-500 backdrop-blur-md shadow-lg">{loading ? '...' : 'Terminé de verlo (+ Pts)'}</button>
+                                            <button onClick={() => setSelectedVideo(null)} className="bg-black/50 text-white p-2 rounded-full hover:bg-black transition-colors"><X className="w-5 h-5" /></button>
+                                        </div>
+                                        <div className="flex-1 w-full h-full relative">
+                                            {selectedVideo.type === 'youtube' && <iframe src={`https://www.youtube.com/embed/${selectedVideo.id}?autoplay=1`} className="absolute inset-0 w-full h-full border-0" allow="autoplay; fullscreen"></iframe>}
+                                            {selectedVideo.type === 'drive' && <iframe src={`https://drive.google.com/file/d/${selectedVideo.id}/preview`} className="absolute inset-0 w-full h-full border-0" allow="autoplay; fullscreen"></iframe>}
+                                            {!selectedVideo.type && <div className="absolute inset-0 flex items-center justify-center text-white/50 font-bold text-sm">Video no disponible.</div>}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    )}
-
-                    {/* POPUP DE RESTRICCIÓN */}
-                    {restrictedPopup && (
-                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in" onClick={() => setRestrictedPopup(false)}>
-                            <div className="bg-[#f0e3d1] w-full max-w-sm rounded-[2rem] p-8 text-center shadow-2xl relative animate-zoom-in border border-brand-dark/20" onClick={e => e.stopPropagation()}>
-                                <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner"><Lock className="w-10 h-10 text-red-600" /></div>
-                                <h3 className="text-2xl font-black uppercase mb-3 text-brand-dark">Acceso Restringido</h3>
-                                <p className="font-medium text-brand-dark/80 mb-8 leading-relaxed text-sm">Tu cuenta está actualmente en estado <strong className="text-red-700 uppercase">INACTIVO / ASPIRANTE</strong>.<br/><br/>Para poder acceder a los videos y sumar puntos en el ranking, debes renovar tu suscripción en recepción.</p>
-                                <button onClick={() => setRestrictedPopup(false)} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black text-lg hover:scale-[1.02] active:scale-95 transition-transform shadow-lg">Entendido, regresar</button>
-                            </div>
-                        </div>
-                    )}
+                    </div>
                 </div>
-            </div>
-        </div>
-    );
-}
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
