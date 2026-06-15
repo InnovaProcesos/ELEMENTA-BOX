@@ -9,6 +9,8 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- LIBRERIA CONFETTI -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
 <body class="bg-[#E5D3BD]">
@@ -130,8 +132,8 @@
             return streak;
         };
 
-        // COMPRESOR MEJORADO (Previene cuelgues)
-        const compressImage = (file) => {
+        // Obtenemos Base64 para cualquier archivo, pero comprimimos si es imagen
+        const getBase64 = (file) => {
             return new Promise((resolve, reject) => {
                 if (!file.type.startsWith('image/')) {
                     const reader = new FileReader();
@@ -192,7 +194,7 @@
             const [selectedVideo, setSelectedVideo] = useState(null); 
             const [restrictedPopup, setRestrictedPopup] = useState(false);
             const [uploadingReto, setUploadingReto] = useState(null);
-            const [previewImgUrl, setPreviewImgUrl] = useState(null);
+            const [previewFile, setPreviewFile] = useState(null);
 
             // Admin States
             const [adminTab, setAdminTab] = useState('evidencias'); 
@@ -215,7 +217,7 @@
                 } catch (e) {}
             }, []);
 
-            // Animación de Confetti
+            // Animación de Confetti de Insignias Nuevas
             useEffect(() => {
                 if(evidenciasList.length > 0 && typeof confetti === 'function') {
                     try {
@@ -349,9 +351,9 @@
                 
                 const diffDays = Math.ceil((utcDate - today) / (1000 * 60 * 60 * 24));
 
-                if (0 > diffDays) return { estado: 'vencido', mensaje: 'Tu suscripción está VENCIDA', dias: diffDays };
+                if (0 > diffDays) return { estado: 'vencido', mensaje: 'Suscripción VENCIDA', dias: diffDays };
                 if (0 === diffDays) return { estado: 'alerta', mensaje: 'Tu membresía vence HOY', dias: diffDays };
-                if (5 >= diffDays) return { estado: 'aviso', mensaje: `¡Alerta! Vence en ${diffDays} día(s)`, dias: diffDays };
+                if (5 >= diffDays) return { estado: 'aviso', mensaje: `Vence en ${diffDays} día(s)`, dias: diffDays };
                 return null;
             };
 
@@ -359,44 +361,48 @@
 
             const handleFileChange = (e) => {
                 const file = e.target.files[0];
-                if(file) { setPreviewImgUrl(URL.createObjectURL(file)); } 
-                else { setPreviewImgUrl(null); }
+                if(file) { 
+                    setPreviewFile({ url: URL.createObjectURL(file), type: file.type }); 
+                    setErrorMsg('');
+                } else { setPreviewFile(null); }
             };
 
             const handleEvidenceSubmit = async (e) => {
                 e.preventDefault(); setLoading(true); setErrorMsg(''); setSuccessMsg('');
                 const fileInput = e.target.imagen.files[0];
                 
-                if (!fileInput) {
-                    setErrorMsg("Selecciona un archivo."); setLoading(false); return;
-                }
-                // Limite 5MB
-                if(fileInput.size > 5 * 1024 * 1024) {
-                    setErrorMsg("El archivo es demasiado grande (Máx 5MB). Por favor graba un video más corto o elige una foto de menor resolución.");
+                if (!fileInput) { setErrorMsg("Selecciona un archivo."); setLoading(false); return; }
+                
+                // Limite 8MB estricto para evitar congelación del servidor
+                if(fileInput.size > 8 * 1024 * 1024) {
+                    setErrorMsg("Archivo demasiado pesado (Máximo 8MB). Si es un video, sube uno más corto o usa una foto.");
                     setLoading(false); return;
                 }
 
-                setSuccessMsg("Comprimiendo y subiendo... por favor espera.");
-                let base64 = await compressImage(fileInput);
+                setSuccessMsg("Comprimiendo y Subiendo archivo... Espera unos segundos.");
+                let base64 = await getBase64(fileInput); // Comprime foto o saca base64 de video
+                
                 const res = await apiCall('submitEvidence', {
                     email: user.email, retoTitulo: uploadingReto.Titulo, puntos: uploadingReto.Puntos, base64: base64, filename: fileInput.name
                 });
                 
                 if(res.status === 'success') { 
-                    setSuccessMsg('Evidencia enviada para validación.');
-                    setUploadingReto(null); setPreviewImgUrl(null);
-                    fetchData(user.role, user.status, user.email); 
+                    setSuccessMsg('Evidencia enviada a revisión exitosamente.');
+                    setTimeout(() => {
+                        setUploadingReto(null); setPreviewFile(null);
+                        fetchData(user.role, user.status, user.email); 
+                        setSuccessMsg('');
+                    }, 2000);
                 } else {
                     setErrorMsg(res.message);
                     setSuccessMsg('');
                 }
-                setLoading(false); setTimeout(() => setSuccessMsg(''), 4000);
+                setLoading(false);
             };
 
             const completeVideoChallenge = async () => {
                 if(!selectedVideo || !selectedVideo.id) return;
-                // Buscamos globalmente para que no falle si la fecha lo oculta
-                const videoReto = retosList.find(r => String(r.Titulo).toLowerCase().includes('video'));
+                const videoReto = retosList.find(r => String(r.Titulo).toLowerCase().includes('video') || String(r.Titulo).toLowerCase().includes('academia'));
                 if(!videoReto) { alert("El reto de ver videos no existe en la base de datos."); return; }
 
                 setLoading(true);
@@ -457,7 +463,7 @@
                 let base64 = null; let filename = null;
                 if (fileInput) {
                     setSuccessMsg('Preparando imagen...');
-                    base64 = await compressImage(fileInput);
+                    base64 = await getBase64(fileInput);
                     filename = fileInput.name;
                 }
                 
@@ -490,7 +496,7 @@
             const toggleCategory = (cat) => setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
 
             const Topbar = () => (
-                <div className="sticky top-0 z-[100] bg-brand-bg1/90 backdrop-blur-xl px-6 py-4 flex justify-between items-center shadow-sm border-b border-white/20">
+                <div className="sticky top-0 z-[100] bg-brand-bg1/90 backdrop-blur-xl px-6 py-4 flex justify-between items-center shadow-sm border-b border-brand-dark/10">
                     <div className="flex items-center gap-2">
                         <div className="bg-brand-dark p-2 rounded-lg shadow-lg"><Activity className="w-5 h-5 text-brand-bg1" /></div>
                         <span className="font-black text-xl tracking-widest uppercase text-brand-dark">Elements</span>
@@ -503,22 +509,23 @@
                 </div>
             );
 
+            // Menu inferior Negro contrastado
             const BottomNav = () => (
-                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-md bg-black backdrop-blur-lg p-2 rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.5)] flex justify-between items-center z-[100] border border-white/20">
+                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-md bg-brand-dark backdrop-blur-lg p-2 rounded-full shadow-2xl flex justify-between items-center z-[100] border-2 border-brand-bg2">
                     {['dashboard', 'academy', 'ranking', 'blog'].map(view => {
                         const isApp = currentView === view;
                         const icons = { dashboard: UserCircle, academy: Video, ranking: Trophy, blog: BookOpen };
                         const labels = { dashboard: 'Inicio', academy: 'Aprende', ranking: 'Ranking', blog: 'Blog' };
                         const Icon = icons[view];
                         return (
-                            <button key={view} onClick={() => handleNavigation(view)} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${isApp ? 'bg-brand-bg1 text-black shadow-md' : 'text-white/60 hover:text-white flex-1'}`}>
+                            <button key={view} onClick={() => handleNavigation(view)} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${isApp ? 'bg-brand-bg1 text-brand-dark shadow-md' : 'text-brand-bg1/60 hover:text-brand-bg1 flex-1'}`}>
                                 <Icon className="w-5 h-5" />
                                 {isApp && <span className="ml-1.5 text-xs font-black uppercase tracking-wider animate-fade-in">{labels[view]}</span>}
                             </button>
                         );
                     })}
                     {user?.role === 'admin' && (
-                        <button onClick={() => handleNavigation('admin')} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${currentView === 'admin' ? 'bg-brand-bg1 text-black shadow-md' : 'text-white/60 hover:text-white flex-1'}`}>
+                        <button onClick={() => handleNavigation('admin')} className={`relative flex items-center justify-center p-3 rounded-full transition-all duration-300 ${currentView === 'admin' ? 'bg-brand-bg1 text-brand-dark shadow-md' : 'text-brand-bg1/60 hover:text-brand-bg1 flex-1'}`}>
                             <Database className="w-5 h-5" />
                             {currentView === 'admin' && <span className="ml-1.5 text-xs font-black uppercase tracking-wider animate-fade-in">Admin</span>}
                         </button>
@@ -544,7 +551,7 @@
                             {!user && (currentView === 'login' || currentView === 'register') && (
                                 <div className="flex flex-col items-center justify-center animate-slide-up py-10">
                                     <div className="mb-8 flex flex-col items-center">
-                                        <div className="w-24 h-24 rounded-[2rem] bg-brand-dark flex items-center justify-center shadow-2xl mb-4 rotate-3 border-4 border-white/20"><Activity className="w-12 h-12 text-brand-bg1 -rotate-3" /></div>
+                                        <div className="w-24 h-24 rounded-[2rem] bg-brand-dark flex items-center justify-center shadow-2xl mb-4 rotate-3 border-4 border-brand-dark/10"><Activity className="w-12 h-12 text-brand-bg1 -rotate-3" /></div>
                                         <h1 className="text-4xl font-black uppercase tracking-widest text-brand-dark drop-shadow-sm">Elements</h1>
                                         <h2 className="text-xl font-medium tracking-[0.4em] text-brand-dark/70">TRAINING BOX</h2>
                                     </div>
@@ -591,16 +598,14 @@
                                 </div>
                             )}
 
-                            {/* DASHBOARD ULTRA COMPACTO */}
+                            {/* DASHBOARD COMPACTO Y PROFESIONAL */}
                             {user && currentView === 'dashboard' && (
                                 <div className="animate-slide-up space-y-4">
-                                    {successMsg && <div className="bg-green-500 text-white p-4 rounded-xl text-sm text-center font-bold animate-fade-in shadow-md">{successMsg}</div>}
-                                    {errorMsg && <div className="bg-red-500 text-white p-4 rounded-xl text-sm text-center font-bold animate-fade-in shadow-md">{errorMsg}</div>}
                                     
                                     {/* ALERTA DE CADUCIDAD PERMANENTE SI APLICAN CONDICIONES */}
                                     {infoCaducidad && (
                                         <div className={`glass-card p-3 rounded-2xl flex items-center gap-3 border-l-4 shadow-sm ${infoCaducidad.estado === 'vencido' ? 'border-red-600 bg-red-50' : 'border-orange-500 bg-orange-50'}`}>
-                                            <AlertCircle className={`w-5 h-5 shrink-0 ${infoCaducidad.estado === 'vencido' ? 'text-red-600' : 'text-orange-600'}`} />
+                                            <AlertCircle className={`w-6 h-6 shrink-0 ${infoCaducidad.estado === 'vencido' ? 'text-red-600' : 'text-orange-600'}`} />
                                             <div>
                                                 <p className={`font-black text-[10px] uppercase ${infoCaducidad.estado === 'vencido' ? 'text-red-800' : 'text-orange-800'}`}>Aviso de Suscripción</p>
                                                 <p className={`text-xs font-bold ${infoCaducidad.estado === 'vencido' ? 'text-red-700' : 'text-orange-700'}`}>{infoCaducidad.mensaje}</p>
@@ -608,11 +613,11 @@
                                         </div>
                                     )}
 
-                                    {/* SUPER CARD DE PERFIL */}
+                                    {/* SUPER CARD DE PERFIL (Ajustado) */}
                                     <div className="glass-card rounded-[1.5rem] p-4 flex flex-col gap-4 border border-white/50 shadow-md">
                                         <div className="flex justify-between items-center">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-12 h-12 bg-black text-brand-bg1 rounded-full flex items-center justify-center font-black text-xl shadow-lg ring-2 ring-brand-dark/10">{String(user.name || 'E').charAt(0).toUpperCase()}</div>
+                                                <div className="w-12 h-12 bg-brand-dark text-brand-bg1 rounded-full flex items-center justify-center font-black text-xl shadow-lg ring-2 ring-brand-bg1/30">{String(user.name || 'E').charAt(0).toUpperCase()}</div>
                                                 <div>
                                                     <h2 className="text-xl font-black uppercase leading-none text-brand-dark">{String(user.name || 'Atleta').split(' ')[0]}</h2>
                                                     <p className="text-[10px] font-black text-brand-dark/50 uppercase tracking-wider mt-1">{user.plan || 'Sin Plan'} • <span className={String(user.status || '').trim().toLowerCase() === 'activo' ? 'text-green-600' : 'text-red-600'}>{user.status}</span></p>
@@ -621,19 +626,19 @@
                                             <div className="flex gap-2">
                                                 <div className="bg-brand-bg2 text-brand-dark px-3 py-1.5 rounded-xl flex flex-col items-center shadow-sm">
                                                     <span className="font-black text-lg leading-none">{misPuntos}</span>
-                                                    <span className="text-[8px] font-black uppercase tracking-widest mt-1 opacity-70">Pts</span>
+                                                    <span className="text-[8px] font-black uppercase tracking-widest mt-0.5 opacity-70">Pts</span>
                                                 </div>
                                                 <div className="bg-orange-500 text-white px-3 py-1.5 rounded-xl flex flex-col items-center shadow-sm relative overflow-hidden">
                                                     <Flame className="absolute -bottom-1 -left-1 w-6 h-6 opacity-20" />
                                                     <span className="font-black text-lg leading-none z-10">{userStreak}🔥</span>
-                                                    <span className="text-[8px] font-black uppercase tracking-widest mt-1 opacity-90 z-10">Racha</span>
+                                                    <span className="text-[8px] font-black uppercase tracking-widest mt-0.5 opacity-90 z-10">Racha</span>
                                                 </div>
                                             </div>
                                         </div>
                                         {!String(user.plan || '').includes('12 Clases') ? (
                                             <div className="bg-white/50 rounded-xl p-2.5 flex justify-between items-center text-[10px] font-bold text-brand-dark/80">
-                                                <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> Ingreso: {formatearFecha(user.ingreso)}</span>
-                                                <span className="flex items-center gap-1"><AlertCircle className="w-3 h-3"/> Vence: {formatearFecha(user.caducidad)}</span>
+                                                <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-brand-dark/50"/> Ingreso: {formatearFecha(user.ingreso)}</span>
+                                                <span className="flex items-center gap-1"><AlertCircle className="w-3 h-3 text-brand-dark/50"/> Vence: {formatearFecha(user.caducidad)}</span>
                                             </div>
                                         ) : (
                                             <div className="bg-white/50 rounded-xl p-2.5 flex justify-center items-center text-[10px] font-bold text-brand-dark/80">
@@ -648,11 +653,11 @@
                                             <h3 className="font-black uppercase text-xs mb-3 flex items-center gap-2"><Trophy className="w-4 h-4 text-yellow-600"/> Mis Insignias Ganadas</h3>
                                             <div className="flex gap-4 overflow-x-auto hide-scroll pb-2">
                                                 {evidenciasList.filter(e => e.Estado === 'Aprobado').map((e, idx) => (
-                                                    <div key={idx} className="flex flex-col items-center shrink-0 w-[70px]">
-                                                        <div className="w-12 h-12 bg-gradient-to-br from-yellow-300 to-yellow-600 rounded-full flex items-center justify-center shadow-md border-2 border-white/80 cursor-default hover:scale-105 transition-transform">
-                                                            <span className="font-black text-white text-[10px]">+{e.Puntos}</span>
+                                                    <div key={idx} className="flex flex-col items-center shrink-0 w-[75px] group">
+                                                        <div className="w-12 h-12 bg-gradient-to-br from-yellow-300 to-yellow-600 rounded-full flex items-center justify-center shadow-md border-2 border-white/80 cursor-help hover:scale-105 transition-transform">
+                                                            <span className="font-black text-brand-dark text-[10px]">+{e.Puntos}</span>
                                                         </div>
-                                                        <span className="text-[8px] font-bold text-center leading-tight mt-1 w-full line-clamp-2" title={e.Reto}>{e.Reto}</span>
+                                                        <span className="text-[8px] font-bold text-center leading-tight mt-2 w-full text-brand-dark/80" title={e.Reto}>{e.Reto}</span>
                                                     </div>
                                                 ))}
                                             </div>
@@ -661,18 +666,18 @@
 
                                     {/* RETOS ACTIVOS */}
                                     {String(user.status || '').trim().toLowerCase() === 'activo' && activeChallenges.length > 0 && (
-                                        <div className="glass-card rounded-[1.5rem] p-4 border border-white/40 overflow-hidden shadow-sm">
+                                        <div className="glass-card rounded-[1.5rem] p-4 sm:p-5 border border-white/40 overflow-hidden shadow-sm">
                                             <div className="flex items-center gap-2 mb-4"><Target className="w-4 h-4 text-brand-dark/70"/><h3 className="font-black uppercase text-sm">Retos Vigentes</h3></div>
                                             
                                             <div className="space-y-3">
                                                 {activeChallenges.map((reto, idx) => {
                                                     const titulo = String(reto.Titulo).toLowerCase();
-                                                    const esVideo = titulo.includes('video');
+                                                    const esVideo = titulo.includes('video') || titulo.includes('academia');
                                                     const esRacha = titulo.includes('racha') || titulo.includes('conexión');
 
                                                     const miEvidencia = evidenciasList.find(e => e.Reto === reto.Titulo);
                                                     const estado = miEvidencia ? miEvidencia.Estado : 'Sin Hacer';
-                                                    if(estado === 'Aprobado' && !esVideo) return null; // Los videos si se muestran porque tienen progreso
+                                                    if(estado === 'Aprobado' && !esVideo) return null;
 
                                                     let percent = 0; let color = 'bg-brand-dark/20'; let textoProgreso = ''; let accionUi = null;
 
@@ -682,15 +687,15 @@
                                                         percent = totalVideos > 0 ? (vistos / totalVideos) * 100 : 0;
                                                         textoProgreso = `${vistos}/${totalVideos} Vistos`;
                                                         color = percent >= 100 ? 'bg-green-500' : 'bg-blue-500';
-                                                        accionUi = <span className="text-[9px] font-bold text-brand-dark/50 bg-white px-2 py-1 rounded border border-brand-dark/10">Academia</span>;
-                                                        if(percent >= 100) return null; // Si vió todos, ya oculta
+                                                        accionUi = <span className="text-[9px] font-bold text-brand-dark/50 bg-white px-2 py-1 rounded border border-brand-dark/10 shadow-sm">Academia</span>;
+                                                        if(percent >= 100) return null;
                                                     } else if (esRacha) {
                                                         const metaDias = titulo.includes('semanal') ? 7 : (titulo.includes('mensual') ? 30 : 2);
                                                         percent = (userStreak / metaDias) * 100;
                                                         if(percent > 100) percent = 100;
                                                         textoProgreso = `${userStreak}/${metaDias} Días`;
                                                         color = percent >= 100 ? 'bg-green-500' : 'bg-orange-500';
-                                                        accionUi = <span className="text-[9px] font-bold text-brand-dark/50 bg-white px-2 py-1 rounded border border-brand-dark/10">Automático</span>;
+                                                        accionUi = <span className="text-[9px] font-bold text-brand-dark/50 bg-white px-2 py-1 rounded border border-brand-dark/10 shadow-sm">Automático</span>;
                                                     } else {
                                                         if(estado === 'Pendiente') { percent = 50; color = 'bg-yellow-500'; textoProgreso = 'En revisión'; }
                                                         else { textoProgreso = 'Pendiente'; }
@@ -707,7 +712,7 @@
                                                     }
 
                                                     return (
-                                                        <div key={idx} className="bg-white/50 p-3 rounded-2xl border border-brand-dark/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-white transition-colors">
+                                                        <div key={idx} className="bg-white/50 p-3 rounded-xl border border-brand-dark/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-white transition-colors">
                                                             <div className="flex-1 w-full">
                                                                 <div className="flex items-center gap-2 mb-1">
                                                                     <h4 className="font-black text-xs text-brand-dark uppercase truncate">{reto.Titulo}</h4>
@@ -742,9 +747,9 @@
                                                         <div className="flex-1 pr-2">
                                                             <p className="font-black text-brand-dark uppercase text-[10px]">{e.Reto}</p>
                                                             <p className="text-[9px] font-bold text-brand-dark/60">{formatearFecha(e.Fecha)}</p>
-                                                            {e.Observacion && <p className="text-[9px] text-red-600 font-bold mt-1 leading-tight bg-white p-1 rounded inline-block shadow-sm"><Info className="w-3 h-3 inline"/> {e.Observacion}</p>}
+                                                            {e.Observacion && <p className="text-[9px] text-red-600 font-bold mt-1 leading-tight bg-red-50 p-1 rounded inline-block shadow-sm border border-red-100"><Info className="w-3 h-3 inline"/> {e.Observacion}</p>}
                                                         </div>
-                                                        <span className={`px-2 py-1 rounded font-black uppercase text-[9px] whitespace-nowrap ${e.Estado === 'Rechazado' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                        <span className={`px-2 py-1 rounded font-black uppercase text-[9px] whitespace-nowrap shadow-sm ${e.Estado === 'Rechazado' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-yellow-100 text-yellow-700 border border-yellow-200'}`}>
                                                             {e.Estado}
                                                         </span>
                                                     </div>
@@ -812,7 +817,7 @@
                                                                         <div className="p-5 flex-1 flex flex-col">
                                                                             <h4 className="font-black text-xl leading-tight uppercase mb-2 text-brand-dark">{vid.Nombre}</h4>
                                                                             <p className="text-sm text-brand-dark/70 font-medium line-clamp-2 mt-auto">{vid.Descripcion}</p>
-                                                                            {isReclamado && <p className="text-[10px] font-bold text-green-600 mt-2 bg-green-50 px-2 py-1 rounded inline-block self-start">¡Puntos Reclamados! ✅</p>}
+                                                                            {isReclamado && <p className="text-[10px] font-black text-green-700 mt-3 bg-green-100 px-2 py-1 rounded-md inline-block self-start border border-green-200">¡Puntos Reclamados! ✅</p>}
                                                                         </div>
                                                                     </div>
                                                                 )
@@ -847,7 +852,7 @@
                                                         <div className="p-6 bg-white/40 flex-1 flex flex-col">
                                                             <div className="flex justify-between items-start mb-3">
                                                                 <span className="bg-brand-dark text-brand-bg1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">{post.Etiqueta || 'Novedad'}</span>
-                                                                <span className="text-[10px] font-bold text-brand-dark/50 uppercase">{post.Fecha}</span>
+                                                                <span className="text-[10px] font-bold text-brand-dark/50 uppercase">{formatearFecha(post.Fecha)}</span>
                                                             </div>
                                                             <h3 className="text-2xl font-black leading-tight mb-2">{post.Titulo}</h3>
                                                             <p className="font-medium text-brand-dark/70 text-sm mb-4 line-clamp-2">{post['Descripcion Corta'] || post.Descripcion}</p>
@@ -871,7 +876,7 @@
                                         <h2 className="text-4xl font-black uppercase leading-none mt-1">Leaderboard</h2>
                                         <p className="text-sm font-bold text-brand-dark/50 mt-2">Puntuación por Asistencia y Retos</p>
                                     </div>
-                                    <div className="glass-card rounded-[2rem] overflow-hidden border border-white/40">
+                                    <div className="glass-card rounded-[2rem] overflow-hidden border border-white/40 shadow-sm">
                                         <table className="w-full text-left border-collapse">
                                             <thead>
                                                 <tr className="bg-brand-dark/5 text-[10px] uppercase font-black tracking-widest text-brand-dark/70 border-b border-brand-dark/10">
@@ -882,7 +887,8 @@
                                             </thead>
                                             <tbody className="text-sm">
                                                 {dataLoading ? <tr><td colSpan="3"><Loader/></td></tr> : 
-                                                    [...rankingList].sort((a,b) => (Number(b.Puntos) || 0) - (Number(a.Puntos) || 0)).map((r, idx) => (
+                                                    rankingList.length === 0 ? <tr><td colSpan="3" className="p-6 text-center font-bold text-brand-dark/50">Aún no hay puntos registrados en el Ranking.</td></tr> :
+                                                    [...rankingList].map((r, idx) => (
                                                         <tr key={idx} className={`border-b border-white/30 transition-colors ${idx === 0 ? 'bg-yellow-500/20' : 'hover:bg-white/50'}`}>
                                                             <td className="p-4 pl-6 text-center font-black text-xl text-brand-dark/40">#{idx + 1}</td>
                                                             <td className="p-4 font-black uppercase">{r.Nombre || r.Nombres} {idx===0 && '🏆'}</td>
@@ -959,7 +965,7 @@
                                                             <a href={adminEvalEvidencia.URL_Evidencia} target="_blank" rel="noopener noreferrer" className="bg-blue-100 text-blue-700 px-6 py-3 rounded-full font-black text-xs uppercase hover:bg-blue-200 transition-colors flex items-center gap-2 shadow-sm border border-blue-200">
                                                                 <ExternalLink className="w-4 h-4"/> Abrir Evidencia
                                                             </a>
-                                                            <p className="text-[10px] mt-2 text-brand-dark/50">Se abrirá la foto o video en una pestaña nueva para mejor visualización.</p>
+                                                            <p className="text-[10px] mt-2 text-brand-dark/50">Se abrirá la foto o video en una pestaña nueva.</p>
                                                         </div>
                                                     )}
 
@@ -998,7 +1004,7 @@
                                         </div>
                                     )}
 
-                                    {/* BLOG ADMIN CORREGIDO */}
+                                    {/* NUEVO BLOG REPARADO (Cierre correcto de etiquetas) */}
                                     {adminTab === 'blog' && (
                                         <div className="glass-card p-6 rounded-[2rem] border border-white/40">
                                             <h3 className="text-xl font-black mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5"/> Publicar Noticia</h3>
@@ -1027,33 +1033,39 @@
 
                             {user && <BottomNav />}
 
-                            {/* MODAL UPLOAD RETO CON PREVIEW */}
+                            {/* MODAL UPLOAD RETO CON PREVIEW COMPRIMIDO */}
                             {uploadingReto && (
                                 <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in">
                                     <div className="bg-[#f0e3d1] w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl relative animate-zoom-in border border-white/20">
-                                        <button type="button" onClick={() => {setUploadingReto(null); setPreviewImgUrl(null); setErrorMsg('');}} className="absolute top-4 right-4 bg-brand-dark/10 text-brand-dark p-2 rounded-full hover:bg-brand-dark/20"><X className="w-4 h-4" /></button>
+                                        <button type="button" onClick={() => {setUploadingReto(null); setPreviewFile(null); setErrorMsg(''); setSuccessMsg('');}} className="absolute top-4 right-4 bg-brand-dark/10 text-brand-dark p-2 rounded-full hover:bg-brand-dark/20"><X className="w-4 h-4" /></button>
                                         <h3 className="text-xl font-black uppercase mb-2 text-center text-brand-dark">Evidencia</h3>
                                         <p className="text-[10px] font-bold text-brand-dark/60 mb-6 text-center leading-tight uppercase">{uploadingReto.Titulo}</p>
                                         
                                         {errorMsg && <div className="bg-red-500 text-white p-3 rounded-xl mb-4 text-xs font-bold text-center shadow-md">{errorMsg}</div>}
+                                        {successMsg && <div className="bg-yellow-500 text-white p-3 rounded-xl mb-4 text-xs font-bold text-center shadow-md animate-pulse">{successMsg}</div>}
                                         
                                         <form onSubmit={handleEvidenceSubmit} className="space-y-4">
-                                            {previewImgUrl ? (
+                                            {previewFile ? (
                                                 <div className="w-full flex flex-col items-center gap-3">
                                                     <div className="w-full h-48 bg-black/5 rounded-2xl border border-black/10 overflow-hidden flex items-center justify-center relative group">
-                                                        <img src={previewImgUrl} className="w-full h-full object-cover" />
-                                                        <button type="button" onClick={() => setPreviewImgUrl(null)} className="absolute inset-0 bg-black/50 text-white font-black text-xs uppercase opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">Cambiar Foto</button>
+                                                        {previewFile.type.startsWith('video/') ? (
+                                                            <video src={previewFile.url} controls className="w-full h-full object-contain bg-black"></video>
+                                                        ) : (
+                                                            <img src={previewFile.url} className="w-full h-full object-contain" />
+                                                        )}
+                                                        
+                                                        <button type="button" onClick={() => setPreviewFile(null)} className="absolute top-2 right-2 bg-black/50 text-white font-black text-[10px] uppercase px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">Cambiar</button>
                                                     </div>
                                                 </div>
                                             ) : (
                                                 <div className="relative w-full h-32 rounded-2xl bg-white/60 border-2 border-dashed border-brand-dark/30 hover:border-brand-dark transition-colors flex flex-col items-center justify-center gap-2 font-black cursor-pointer uppercase text-xs tracking-wider">
                                                     <Camera className="w-8 h-8 text-brand-dark/50" />
-                                                    <span className="text-brand-dark/50 text-center px-4">Toca para tomar foto</span>
+                                                    <span className="text-brand-dark/50 text-center px-4">Toca para subir Foto / Video</span>
                                                     <input type="file" name="imagen" accept="image/*,video/*" required onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                                                 </div>
                                             )}
                                             
-                                            <button type="submit" disabled={loading || !previewImgUrl} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black uppercase hover:scale-105 shadow-xl transition-transform disabled:opacity-50">{loading ? 'Comprimiendo y Enviando...' : 'Enviar a Revisión'}</button>
+                                            <button type="submit" disabled={loading || !previewFile} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black uppercase hover:scale-105 shadow-xl transition-transform disabled:opacity-50">{loading ? 'Procesando...' : 'Enviar a Revisión'}</button>
                                         </form>
                                     </div>
                                 </div>
@@ -1097,7 +1109,7 @@
                                             <div className={`p-6 sm:p-12 ${!selectedPost.cleanImg ? 'pt-20' : ''}`}>
                                                 <div className="flex gap-3 mb-5">
                                                     <span className="bg-brand-dark text-brand-bg1 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">{selectedPost.Etiqueta || 'Novedad'}</span>
-                                                    <span className="text-brand-dark/60 text-xs font-bold uppercase py-1.5">{selectedPost.Fecha}</span>
+                                                    <span className="text-brand-dark/60 text-xs font-bold uppercase py-1.5">{formatearFecha(post.Fecha)}</span>
                                                 </div>
                                                 <h2 className="text-4xl sm:text-5xl font-black text-brand-dark leading-tight mb-8 drop-shadow-sm">{selectedPost.Titulo}</h2>
                                                 <div className="text-brand-dark/90 font-medium leading-relaxed whitespace-pre-wrap text-base sm:text-lg">
@@ -1109,9 +1121,9 @@
                                 </div>
                             )}
 
-                            {/* MODAL REPRODUCTOR DE VIDEO */}
+                            {/* MODAL REPRODUCTOR DE VIDEO CON COMPLETADO */}
                             {selectedVideo && (() => {
-                                const videoReto = retosList.find(r => String(r.Titulo).toLowerCase().includes('video'));
+                                const videoReto = retosList.find(r => String(r.Titulo).toLowerCase().includes('video') || String(r.Titulo).toLowerCase().includes('academia'));
                                 const isReclamado = videoReto && evidenciasList.some(e => e.Reto === videoReto.Titulo && e.URL_Evidencia === selectedVideo.id && e.Estado === 'Aprobado');
                                 
                                 return (
@@ -1119,11 +1131,11 @@
                                         <div className="bg-black w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl relative aspect-video flex flex-col" onClick={e => e.stopPropagation()}>
                                             <div className="absolute top-4 right-4 z-30 flex gap-2">
                                                 {isReclamado ? (
-                                                    <div className="bg-green-500/90 text-white px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-wider backdrop-blur-md shadow-lg flex items-center gap-1"><CheckCircle className="w-3 h-3"/> Reclamado</div>
+                                                    <div className="bg-green-500 text-white px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-wider shadow-lg flex items-center gap-1 border border-green-400"><CheckCircle className="w-4 h-4"/> ¡Puntos Reclamados!</div>
                                                 ) : (
                                                     videoReto && <button onClick={completeVideoChallenge} disabled={loading} className="bg-orange-500/90 text-white px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-wider hover:bg-orange-600 backdrop-blur-md shadow-lg">{loading ? '...' : 'Terminé de verlo (+ Pts)'}</button>
                                                 )}
-                                                <button onClick={() => setSelectedVideo(null)} className="bg-black/50 text-white p-2 rounded-full hover:bg-black transition-colors"><X className="w-5 h-5" /></button>
+                                                <button onClick={() => setSelectedVideo(null)} className="bg-black/50 text-white p-2 rounded-full hover:bg-black transition-colors border border-white/20"><X className="w-5 h-5" /></button>
                                             </div>
                                             <div className="flex-1 w-full h-full relative">
                                                 {selectedVideo.type === 'youtube' && <iframe src={`https://www.youtube.com/embed/${selectedVideo.id}?autoplay=1&rel=0&modestbranding=1`} className="absolute inset-0 w-full h-full border-0" allow="autoplay; fullscreen"></iframe>}
