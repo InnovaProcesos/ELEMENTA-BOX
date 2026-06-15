@@ -10,7 +10,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- LIBRERIA CONFETTI PARA LAS ANIMACIONES DE LOGROS -->
+    <!-- LIBRERIA CONFETTI -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
 <body class="bg-[#E5D3BD]">
@@ -41,9 +41,10 @@
             CheckCircle: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
             Database: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>,
             Info: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
-            Flame: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+            Flame: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>,
+            ExternalLink: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         };
-        const { Play, BookOpen, Users, LogOut, UserCircle, Activity, Lock, Video, Search, ChevronDown, ChevronUp, X, Trophy, AlertCircle, Clock, Target, Camera, Upload, CheckCircle, Database, Info, Flame } = Icons;
+        const { Play, BookOpen, Users, LogOut, UserCircle, Activity, Lock, Video, Search, ChevronDown, ChevronUp, X, Trophy, AlertCircle, Clock, Target, Camera, Upload, CheckCircle, Database, Info, Flame, ExternalLink } = Icons;
 
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx1q7_Mxg8fdtxlz-_whq6bGc8QbqJwTaaEkgyrGgMbnwPe8sHfNkShZgUQnTKWUT99/exec"; 
         const API_SECRET = "ElementsBox_Seguridad_2026";
@@ -104,15 +105,19 @@
 
         const formatearFecha = (fechaString) => {
             if (!fechaString) return 'N/A';
-            const fecha = new Date(fechaString);
-            if(isNaN(fecha.getTime())) return String(fechaString);
-            return fecha.toLocaleDateString('es-CO');
+            const date = new Date(fechaString);
+            if(isNaN(date.getTime())) return String(fechaString);
+            const utcDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
+            return utcDate.toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' });
         };
 
-        // Algoritmo para calcular Racha Continua
         const calculateStreak = (dateStrings) => {
             if(!dateStrings || dateStrings.length === 0) return 0;
-            const uniqueDates = [...new Set(dateStrings.map(d => new Date(d).setHours(0,0,0,0)))].sort((a,b) => b - a);
+            const uniqueDates = [...new Set(dateStrings.map(d => {
+                const date = new Date(d);
+                return new Date(date.getTime() + date.getTimezoneOffset() * 60000).setHours(0,0,0,0);
+            }))].sort((a,b) => b - a);
+            
             const today = new Date().setHours(0,0,0,0);
             const yesterday = today - 86400000;
             
@@ -124,12 +129,45 @@
                     if(d === currentCheck) {
                         streak++;
                         currentCheck -= 86400000;
-                    } else {
-                        break;
-                    }
+                    } else break;
                 }
             }
             return streak;
+        };
+
+        // COMPRESOR DE IMÁGENES AUTOMÁTICO (Evita que el navegador se congele)
+        const compressImage = (file) => {
+            return new Promise((resolve, reject) => {
+                if (!file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = error => reject(error);
+                    return;
+                }
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = event => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 800;
+                        let width = img.width;
+                        let height = img.height;
+                        if (width > MAX_WIDTH) {
+                            height = Math.round((height * MAX_WIDTH) / width);
+                            width = MAX_WIDTH;
+                        }
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.7));
+                    };
+                };
+                reader.onerror = error => reject(error);
+            });
         };
 
         const Loader = () => <div className="flex justify-center py-12"><div className="w-10 h-10 border-4 border-brand-dark border-t-transparent rounded-full animate-spin"></div></div>;
@@ -298,12 +336,15 @@
                 if (!fechaCaducidad) return null;
                 const expDate = new Date(fechaCaducidad);
                 if(isNaN(expDate.getTime())) return null;
-                const today = new Date(); today.setHours(0,0,0,0); expDate.setHours(0,0,0,0);
-                const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+                const utcDate = new Date(expDate.getTime() + expDate.getTimezoneOffset() * 60000);
+                const today = new Date().setHours(0,0,0,0); 
+                utcDate.setHours(0,0,0,0);
+                
+                const diffDays = Math.ceil((utcDate - today) / (1000 * 60 * 60 * 24));
 
                 if (0 > diffDays) return { estado: 'vencido', mensaje: 'Tu suscripción está VENCIDA', dias: diffDays };
                 if (0 === diffDays) return { estado: 'alerta', mensaje: 'Tu membresía vence HOY', dias: diffDays };
-                if (5 >= diffDays) return { estado: 'aviso', mensaje: `¡Alerta! Tu plan vence en ${diffDays} día(s)`, dias: diffDays };
+                if (5 >= diffDays) return { estado: 'aviso', mensaje: `¡Alerta! Vence en ${diffDays} día(s)`, dias: diffDays };
                 return null;
             };
 
@@ -318,21 +359,23 @@
             const handleEvidenceSubmit = async (e) => {
                 e.preventDefault(); setLoading(true); setErrorMsg(''); setSuccessMsg('');
                 const fileInput = e.target.imagen.files[0];
-                let base64 = null; let filename = null;
                 
-                if (fileInput) {
-                    filename = fileInput.name;
-                    const reader = new FileReader();
-                    reader.readAsDataURL(fileInput);
-                    await new Promise(resolve => reader.onload = () => { base64 = reader.result; resolve(); });
+                if (!fileInput) {
+                    setErrorMsg("Selecciona un archivo."); setLoading(false); return;
                 }
-                
+
+                if(fileInput.size > 8 * 1024 * 1024) {
+                    setErrorMsg("El archivo pesa más de 8MB. Intenta subir una foto comprimida o un video muy corto.");
+                    setLoading(false); return;
+                }
+
+                let base64 = await compressImage(fileInput);
                 const res = await apiCall('submitEvidence', {
-                    email: user.email, retoTitulo: uploadingReto.Titulo, puntos: uploadingReto.Puntos, base64, filename
+                    email: user.email, retoTitulo: uploadingReto.Titulo, puntos: uploadingReto.Puntos, base64: base64, filename: fileInput.name
                 });
                 
                 if(res.status === 'success') { 
-                    setSuccessMsg('Evidencia enviada para validación. ¡Buen trabajo!');
+                    setSuccessMsg('Evidencia enviada para validación.');
                     setUploadingReto(null); setPreviewImgUrl(null);
                     fetchData(user.role, user.status, user.email); 
                 } else setErrorMsg(res.message);
@@ -398,16 +441,19 @@
             const handleAdminAddBlog = async (e) => {
                 e.preventDefault(); setLoading(true); setErrorMsg(''); setSuccessMsg('');
                 const fileInput = e.target.imagen ? e.target.imagen.files[0] : null;
-                let imageUrl = '';
+                let base64 = null; let filename = null;
                 if (fileInput) {
-                    setSuccessMsg('Subiendo foto a Drive...');
-                    const reader = new FileReader();
-                    reader.readAsDataURL(fileInput);
-                    await new Promise(resolve => reader.onload = () => {
-                        apiCall('uploadImage', { adminRole: user.role, base64: reader.result, filename: fileInput.name })
-                            .then(up => { if(up.status === 'success') imageUrl = up.url; resolve(); });
-                    });
+                    setSuccessMsg('Preparando imagen...');
+                    base64 = await compressImage(fileInput);
+                    filename = fileInput.name;
                 }
+                
+                let imageUrl = '';
+                if(base64) {
+                    const upload = await apiCall('uploadImage', { adminRole: user.role, base64: base64, filename: filename });
+                    if(upload.status === 'success') imageUrl = upload.url;
+                }
+
                 const res = await apiCall('addBlog', {
                     adminRole: user.role, titulo: e.target.titulo.value, etiqueta: e.target.etiqueta.value,
                     descripcion: e.target.descCorta.value, 
@@ -534,152 +580,173 @@
 
                             {/* DASHBOARD */}
                             {user && currentView === 'dashboard' && (
-                                <div className="animate-slide-up space-y-6">
-                                    {successMsg && <div className="bg-green-500 text-white p-4 rounded-2xl text-center font-bold animate-fade-in shadow-lg">{successMsg}</div>}
+                                <div className="animate-slide-up space-y-4">
+                                    {successMsg && <div className="bg-green-500 text-white p-4 rounded-xl text-sm text-center font-bold animate-fade-in shadow-md">{successMsg}</div>}
                                     
-                                    {/* ALERTA DE CADUCIDAD PERMANENTE SI APLICAN CONDICIONES */}
+                                    {/* ALERTA PERMANENTE DE CADUCIDAD */}
                                     {infoCaducidad && (
-                                        <div className={`glass-card p-4 rounded-2xl flex items-start gap-3 border-l-4 shadow-md ${infoCaducidad.estado === 'vencido' ? 'border-red-600 bg-red-500/10' : 'border-orange-500 bg-orange-500/10'}`}>
-                                            <AlertCircle className={`w-6 h-6 shrink-0 mt-0.5 ${infoCaducidad.estado === 'vencido' ? 'text-red-600' : 'text-orange-600'}`} />
+                                        <div className={`glass-card p-4 rounded-2xl flex items-center gap-3 border-l-4 shadow-sm ${infoCaducidad.estado === 'vencido' ? 'border-red-600 bg-red-50' : 'border-orange-500 bg-orange-50'}`}>
+                                            <AlertCircle className={`w-5 h-5 shrink-0 ${infoCaducidad.estado === 'vencido' ? 'text-red-600' : 'text-orange-600'}`} />
                                             <div>
-                                                <p className={`font-black text-sm uppercase ${infoCaducidad.estado === 'vencido' ? 'text-red-800' : 'text-orange-800'}`}>Aviso de Suscripción</p>
-                                                <p className={`text-sm font-bold ${infoCaducidad.estado === 'vencido' ? 'text-red-700' : 'text-orange-700'}`}>{infoCaducidad.mensaje}</p>
+                                                <p className={`font-black text-[10px] uppercase ${infoCaducidad.estado === 'vencido' ? 'text-red-800' : 'text-orange-800'}`}>Aviso de Suscripción</p>
+                                                <p className={`text-xs font-bold ${infoCaducidad.estado === 'vencido' ? 'text-red-700' : 'text-orange-700'}`}>{infoCaducidad.mensaje}</p>
                                             </div>
                                         </div>
                                     )}
 
-                                    <div className="flex items-end justify-between px-2">
-                                        <div>
-                                            <p className="text-sm font-bold text-brand-dark/50 uppercase tracking-wider">Tu Perfil</p>
-                                            <h2 className="text-4xl font-black uppercase leading-none mt-1">{String(user.name || 'Atleta').split(' ')[0]}</h2>
+                                    {/* DISEÑO COMPACTO: PERFIL Y ESTADÍSTICAS */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div className="sm:col-span-2 glass-card rounded-[1.5rem] p-4 sm:p-5 flex flex-col justify-between border border-white/50 relative overflow-hidden">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-12 h-12 bg-brand-dark text-brand-bg1 rounded-full flex items-center justify-center font-black text-xl shadow-lg ring-2 ring-white/30">{String(user.name || 'E').charAt(0).toUpperCase()}</div>
+                                                    <div>
+                                                        <h2 className="text-xl font-black uppercase leading-none text-brand-dark">{String(user.name || 'Atleta').split(' ')[0]}</h2>
+                                                        <p className="text-[10px] font-black text-brand-dark/50 uppercase tracking-wider mt-1">{user.plan || 'Sin Plan'}</p>
+                                                    </div>
+                                                </div>
+                                                <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase shadow-sm ${String(user.status || '').trim().toLowerCase() === 'activo' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>{user.status || 'Aspirante'}</div>
+                                            </div>
+                                            
+                                            <div className="bg-white/40 rounded-xl p-3 flex justify-between items-center text-xs font-bold text-brand-dark/80">
+                                                {String(user.plan || '').includes('12 Clases') ? (
+                                                    <div className="flex items-center gap-2"><Clock className="w-4 h-4"/> <span>{user.diasRestantes || 0} clases restantes</span></div>
+                                                ) : (
+                                                    <div className="flex justify-between w-full">
+                                                        <span>Ingreso: {formatearFecha(user.ingreso)}</span>
+                                                        <span>Vence: {formatearFecha(user.caducidad)}</span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div className="flex flex-col items-center">
-                                            <div className="w-14 h-14 bg-brand-dark text-brand-bg1 rounded-full flex items-center justify-center font-black text-2xl shadow-lg ring-4 ring-white/30">{String(user.name || 'E').charAt(0).toUpperCase()}</div>
+
+                                        <div className="flex gap-3 sm:flex-col">
+                                            <div className="flex-1 bg-brand-dark text-brand-bg1 p-3 rounded-[1.5rem] flex flex-col justify-center items-center shadow-sm">
+                                                <Trophy className="w-5 h-5 mb-1 opacity-70" />
+                                                <p className="text-2xl font-black leading-none">{misPuntos}</p>
+                                                <p className="text-[9px] font-black opacity-60 uppercase tracking-wider mt-1">Puntos</p>
+                                            </div>
+                                            <div className="flex-1 bg-orange-500 text-white p-3 rounded-[1.5rem] flex flex-col justify-center items-center shadow-sm relative overflow-hidden">
+                                                <Flame className="absolute -left-2 -bottom-2 w-12 h-12 opacity-20" />
+                                                <Flame className="w-5 h-5 mb-1 opacity-90 z-10" />
+                                                <p className="text-2xl font-black leading-none z-10">{userStreak}</p>
+                                                <p className="text-[9px] font-black opacity-90 uppercase tracking-wider mt-1 z-10">Racha Días</p>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div className="glass-card rounded-[2rem] p-6 flex flex-col sm:flex-row gap-4">
-                                        <div className="flex-1 bg-white/40 p-5 rounded-2xl flex flex-col justify-center border border-white/50 relative overflow-hidden">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <div>
-                                                    <p className="text-[10px] font-black text-brand-dark/50 uppercase tracking-wider">Plan Activo</p>
-                                                    <p className="text-2xl font-black uppercase">{user.plan || 'Ninguno'}</p>
-                                                </div>
-                                                <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase shadow-md ${String(user.status || '').trim().toLowerCase() === 'activo' ? 'bg-green-500 text-white' : (String(user.status || '').trim().toLowerCase() === 'aspirante' ? 'bg-yellow-500 text-white' : 'bg-red-500 text-white')}`}>{user.status || 'Aspirante'}</div>
-                                            </div>
-                                            
-                                            {/* MOSTRAR FECHAS CLARAS */}
-                                            {String(user.plan || '').includes('12 Clases') ? (
-                                                <div className="flex items-center gap-1 text-brand-dark/80 font-black text-xs mt-1"><Clock className="w-3 h-3"/> <p>Te quedan {user.diasRestantes || 0} clases</p></div>
-                                            ) : (
-                                                <div className="mt-2 space-y-1">
-                                                    <p className="text-xs font-bold text-brand-dark/70"><strong className="text-brand-dark">Ingreso:</strong> {formatearFecha(user.ingreso)}</p>
-                                                    <p className="text-xs font-bold text-brand-dark/70"><strong className="text-brand-dark">Vencimiento:</strong> {formatearFecha(user.caducidad)}</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                        
-                                        <div className="flex sm:flex-col gap-4">
-                                            <div className="flex-1 bg-brand-dark text-brand-bg1 p-4 rounded-2xl flex flex-col justify-center items-center shadow-xl">
-                                                <Trophy className="w-5 h-5 mb-1 opacity-70" />
-                                                <p className="text-[10px] font-black opacity-60 uppercase tracking-wider">Puntos</p>
-                                                <p className="text-2xl font-black">{misPuntos}</p>
-                                            </div>
-                                            <div className="flex-1 bg-orange-500 text-white p-4 rounded-2xl flex flex-col justify-center items-center shadow-xl">
-                                                <Flame className="w-5 h-5 mb-1 opacity-90" />
-                                                <p className="text-[10px] font-black opacity-80 uppercase tracking-wider">Racha</p>
-                                                <p className="text-2xl font-black">{userStreak}</p>
+                                    {/* INSIGNIAS */}
+                                    {evidenciasList.filter(e => e.Estado === 'Aprobado').length > 0 && (
+                                        <div className="glass-card rounded-[1.5rem] p-4 sm:p-5 border border-white/40">
+                                            <h3 className="font-black uppercase text-xs mb-3 flex items-center gap-2"><Trophy className="w-4 h-4 text-yellow-600"/> Mis Insignias Ganadas</h3>
+                                            <div className="flex gap-3 overflow-x-auto hide-scroll pb-2">
+                                                {evidenciasList.filter(e => e.Estado === 'Aprobado').map((e, idx) => (
+                                                    <div key={idx} className="relative group shrink-0">
+                                                        <div className="w-14 h-14 bg-gradient-to-br from-yellow-300 to-yellow-600 rounded-full flex items-center justify-center shadow-md border-2 border-white/80 cursor-help hover:scale-110 transition-transform">
+                                                            <span className="font-black text-white text-xs">+{e.Puntos}</span>
+                                                        </div>
+                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-brand-dark text-white text-[10px] px-3 py-1.5 rounded-lg whitespace-nowrap z-50 shadow-xl font-bold">
+                                                            {e.Reto}
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
-                                    </div>
+                                    )}
 
                                     {String(user.status || '').trim().toLowerCase() === 'activo' && activeChallenges.length > 0 && (
-                                        <div className="mt-8 space-y-4">
-                                            <div className="flex items-center gap-2 px-2"><Target className="w-5 h-5 text-brand-dark/70"/><h3 className="font-black uppercase text-lg">Retos Vigentes</h3></div>
+                                        <div className="glass-card rounded-[1.5rem] p-4 sm:p-6 border border-white/40 overflow-hidden shadow-sm">
+                                            <div className="flex items-center gap-2 mb-4"><Target className="w-4 h-4 text-brand-dark/70"/><h3 className="font-black uppercase text-sm">Retos Vigentes</h3></div>
                                             
-                                            {/* TABLA COMPACTA DE RETOS CON LÓGICA INTELIGENTE */}
-                                            <div className="glass-card rounded-[1.5rem] p-4 sm:p-6 border border-white/40 overflow-hidden shadow-sm">
-                                                <div className="space-y-3">
-                                                    {activeChallenges.map((reto, idx) => {
-                                                        const titulo = String(reto.Titulo).toLowerCase();
-                                                        const esVideo = titulo.includes('video');
-                                                        const esRacha = titulo.includes('racha') || titulo.includes('conexión');
-                                                        const esAutomatico = esVideo || esRacha;
+                                            <div className="space-y-3">
+                                                {activeChallenges.map((reto, idx) => {
+                                                    const titulo = String(reto.Titulo).toLowerCase();
+                                                    const esVideo = titulo.includes('video');
+                                                    const esRacha = titulo.includes('racha') || titulo.includes('conexión');
+                                                    const esAutomatico = esVideo || esRacha;
 
-                                                        let percent = 0; let color = 'bg-brand-dark/20'; let textoProgreso = ''; let accionUi = null;
-                                                        const miEvidencia = evidenciasList.find(e => e.Reto === reto.Titulo);
+                                                    const miEvidencia = evidenciasList.find(e => e.Reto === reto.Titulo);
+                                                    const estado = miEvidencia ? miEvidencia.Estado : 'Sin Hacer';
+                                                    if(estado === 'Aprobado') return null; // Ocultar si ya se completó para dejar espacio a insignias
 
-                                                        if(esVideo) {
-                                                            const totalVideos = videos.length;
-                                                            const vistos = evidenciasList.filter(e => e.Reto === reto.Titulo && e.Estado === 'Aprobado').length;
-                                                            percent = totalVideos > 0 ? (vistos / totalVideos) * 100 : 0;
-                                                            textoProgreso = `${vistos}/${totalVideos} Videos`;
-                                                            color = percent === 100 ? 'bg-green-500' : 'bg-blue-500';
-                                                            accionUi = <span className="text-[10px] font-bold text-brand-dark/50 bg-white px-2 py-1 rounded border border-brand-dark/10">Academia</span>;
-                                                        } else if (esRacha) {
-                                                            const metaDias = titulo.includes('semanal') ? 7 : (titulo.includes('mensual') ? 30 : 2);
-                                                            percent = (userStreak / metaDias) * 100;
-                                                            if(percent > 100) percent = 100;
-                                                            textoProgreso = `${userStreak}/${metaDias} Días`;
-                                                            color = percent === 100 ? 'bg-green-500' : 'bg-orange-500';
-                                                            accionUi = <span className="text-[10px] font-bold text-brand-dark/50 bg-white px-2 py-1 rounded border border-brand-dark/10">Automático</span>;
+                                                    let percent = 0; let color = 'bg-brand-dark/20'; let textoProgreso = ''; let accionUi = null;
+
+                                                    if(esVideo) {
+                                                        const totalVideos = videos.length;
+                                                        const vistos = evidenciasList.filter(e => e.Reto === reto.Titulo && e.Estado === 'Aprobado').length;
+                                                        percent = totalVideos > 0 ? (vistos / totalVideos) * 100 : 0;
+                                                        textoProgreso = `${vistos}/${totalVideos} Vistos`;
+                                                        color = percent >= 100 ? 'bg-green-500' : 'bg-blue-500';
+                                                        accionUi = <span className="text-[9px] font-bold text-brand-dark/50 bg-white px-2 py-1 rounded border border-brand-dark/10">Academia</span>;
+                                                    } else if (esRacha) {
+                                                        const metaDias = titulo.includes('semanal') ? 7 : (titulo.includes('mensual') ? 30 : 2);
+                                                        percent = (userStreak / metaDias) * 100;
+                                                        if(percent > 100) percent = 100;
+                                                        textoProgreso = `${userStreak}/${metaDias} Días`;
+                                                        color = percent >= 100 ? 'bg-green-500' : 'bg-orange-500';
+                                                        accionUi = <span className="text-[9px] font-bold text-brand-dark/50 bg-white px-2 py-1 rounded border border-brand-dark/10">Automático</span>;
+                                                    } else {
+                                                        if(estado === 'Pendiente') { percent = 50; color = 'bg-yellow-500'; textoProgreso = 'En revisión'; }
+                                                        else { textoProgreso = 'Pendiente'; }
+
+                                                        if (estado === 'Sin Hacer' || estado === 'Rechazado') {
+                                                            accionUi = (
+                                                                <button onClick={() => setUploadingReto(reto)} className="bg-brand-dark text-brand-bg1 px-3 py-1.5 rounded-lg font-black text-[10px] uppercase shadow-md flex items-center justify-center gap-1 hover:scale-105 transition-transform w-full sm:w-auto">
+                                                                    <Upload className="w-3 h-3"/> Adjuntar
+                                                                </button>
+                                                            );
                                                         } else {
-                                                            const estado = miEvidencia ? miEvidencia.Estado : 'Sin Hacer';
-                                                            const obs = miEvidencia ? miEvidencia.Observacion : '';
-                                                            
-                                                            if(estado === 'Aprobado') { percent = 100; color = 'bg-green-500'; textoProgreso = 'Aprobado'; }
-                                                            else if(estado === 'Pendiente') { percent = 50; color = 'bg-yellow-500'; textoProgreso = 'En revisión'; }
-                                                            else if(estado === 'Rechazado') { percent = 10; color = 'bg-red-500'; textoProgreso = 'Rechazado'; }
-                                                            else { textoProgreso = 'Pendiente'; }
-
-                                                            if (estado === 'Sin Hacer' || estado === 'Rechazado') {
-                                                                accionUi = (
-                                                                    <div className="flex flex-col gap-1 items-end w-full sm:w-auto">
-                                                                        <button onClick={() => setUploadingReto(reto)} className="bg-brand-dark text-brand-bg1 px-3 py-1.5 rounded-lg font-black text-[10px] uppercase shadow-md flex items-center justify-center gap-1 hover:scale-105 transition-transform w-full sm:w-auto">
-                                                                            <Upload className="w-3 h-3"/> Adjuntar
-                                                                        </button>
-                                                                        {obs && <p className="text-[9px] font-bold text-red-600 mt-1 max-w-[150px] leading-tight text-right break-words"><Info className="inline w-3 h-3"/> {obs}</p>}
-                                                                    </div>
-                                                                );
-                                                            } else {
-                                                                accionUi = estado === 'Aprobado' ? <CheckCircle className="w-5 h-5 text-green-500" /> : <Clock className="w-5 h-5 text-yellow-500" />;
-                                                            }
+                                                            accionUi = <Clock className="w-5 h-5 text-yellow-500" />;
                                                         }
+                                                    }
 
-                                                        return (
-                                                            <div key={idx} className="bg-white/50 p-3 rounded-2xl border border-brand-dark/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-white transition-colors">
-                                                                <div className="flex-1 w-full">
-                                                                    <div className="flex items-center gap-2 mb-1">
-                                                                        <h4 className="font-black text-sm text-brand-dark uppercase truncate">{reto.Titulo}</h4>
-                                                                        <span className="text-[9px] font-black text-brand-bg1 bg-brand-dark px-2 py-0.5 rounded-md whitespace-nowrap">+{reto.Puntos} pts</span>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2 mt-2">
-                                                                        <div className="flex-1 h-1.5 bg-brand-dark/10 rounded-full overflow-hidden">
-                                                                            <div className={`h-full ${color} transition-all duration-1000`} style={{width: `${percent}%`}}></div>
-                                                                        </div>
-                                                                        <span className={`text-[10px] font-black uppercase w-20 text-right text-brand-dark/60`}>
-                                                                            {textoProgreso}
-                                                                        </span>
-                                                                    </div>
+                                                    return (
+                                                        <div key={idx} className="bg-white/50 p-3 rounded-2xl border border-brand-dark/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-white transition-colors">
+                                                            <div className="flex-1 w-full">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <h4 className="font-black text-xs text-brand-dark uppercase truncate">{reto.Titulo}</h4>
+                                                                    <span className="text-[9px] font-black text-brand-bg1 bg-brand-dark px-2 py-0.5 rounded-md whitespace-nowrap">+{reto.Puntos} pts</span>
                                                                 </div>
-
-                                                                <div className="shrink-0 w-full sm:w-auto flex justify-end items-center mt-2 sm:mt-0">
-                                                                    {accionUi}
+                                                                <div className="flex items-center gap-2 mt-2">
+                                                                    <div className="flex-1 h-1.5 bg-brand-dark/10 rounded-full overflow-hidden">
+                                                                        <div className={`h-full ${color} transition-all duration-1000`} style={{width: `${percent}%`}}></div>
+                                                                    </div>
+                                                                    <span className={`text-[9px] font-black uppercase w-20 text-right text-brand-dark/60`}>
+                                                                        {textoProgreso}
+                                                                    </span>
                                                                 </div>
                                                             </div>
-                                                        )
-                                                    })}
-                                                </div>
+                                                            <div className="shrink-0 w-full sm:w-auto flex justify-end items-center mt-1 sm:mt-0">
+                                                                {accionUi}
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
                                             </div>
                                         </div>
                                     )}
-                                    
-                                    {String(user.status || '').trim().toLowerCase() !== 'activo' && (
-                                        <div className="bg-brand-dark/5 p-4 rounded-2xl flex items-start gap-3 mt-2 border border-brand-dark/10">
-                                            <Lock className="w-5 h-5 text-brand-dark/60 shrink-0 mt-0.5" />
-                                            <p className="text-sm font-bold text-brand-dark/80 leading-relaxed">Tu cuenta no está activa. Renueva en recepción para acceder a retos, videos de academia y sumarte al ranking.</p>
+
+                                    {/* HISTORIAL EVIDENCIAS */}
+                                    {evidenciasList.filter(e => e.Estado === 'Rechazado' || e.Estado === 'Pendiente').length > 0 && (
+                                        <div className="glass-card rounded-[1.5rem] p-4 border border-white/40">
+                                            <h3 className="font-black uppercase text-xs mb-3 text-brand-dark/70 flex items-center gap-2"><Clock className="w-3 h-3"/> Historial de Revisiones</h3>
+                                            <div className="space-y-2">
+                                                {evidenciasList.filter(e => e.Estado === 'Rechazado' || e.Estado === 'Pendiente').map((e, i) => (
+                                                    <div key={i} className="bg-white/40 p-3 rounded-xl flex justify-between items-center text-xs border border-white/50">
+                                                        <div className="flex-1 pr-2">
+                                                            <p className="font-black text-brand-dark uppercase text-[10px]">{e.Reto}</p>
+                                                            <p className="text-[10px] font-bold text-brand-dark/60">{e.Fecha}</p>
+                                                            {e.Observacion && <p className="text-[9px] text-red-600 font-bold mt-0.5 leading-tight"><Info className="w-3 h-3 inline"/> {e.Observacion}</p>}
+                                                        </div>
+                                                        <span className={`px-2 py-1 rounded font-black uppercase text-[9px] whitespace-nowrap ${e.Estado === 'Rechazado' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                            {e.Estado}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     )}
+
                                 </div>
                             )}
 
@@ -709,8 +776,17 @@
                                                         <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-6 bg-black/5 animate-fade-in border-t border-white/20">
                                                             {groupedFilteredVideos[category].map((vid, vIdx) => {
                                                                 const videoInfo = getVideoData(vid.URL || '');
+                                                                // VERIFICAR SI YA ESTÁ RECLAMADO EL VIDEO
+                                                                const videoReto = activeChallenges.find(r => String(r.Titulo).toLowerCase().includes('video'));
+                                                                const isReclamado = videoReto && evidenciasList.some(e => e.Reto === videoReto.Titulo && e.URL_Evidencia === videoInfo.id && e.Estado === 'Aprobado');
+
                                                                 return (
-                                                                    <div key={vIdx} onClick={() => setSelectedVideo(videoInfo)} className="bg-white rounded-3xl overflow-hidden shadow-sm cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-brand-dark/5 flex flex-col group">
+                                                                    <div key={vIdx} onClick={() => setSelectedVideo(videoInfo)} className="bg-white rounded-3xl overflow-hidden shadow-sm cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-brand-dark/5 flex flex-col group relative">
+                                                                        {isReclamado && (
+                                                                            <div className="absolute top-3 right-3 z-20 bg-green-500 text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-md flex items-center gap-1">
+                                                                                <CheckCircle className="w-3 h-3" /> Reclamado
+                                                                            </div>
+                                                                        )}
                                                                         <div className="relative aspect-video bg-brand-dark flex items-center justify-center overflow-hidden">
                                                                             {videoInfo.type === 'youtube' ? (
                                                                                 <img src={`https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`} className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500 group-hover:scale-105" alt={vid.Nombre} />
@@ -738,7 +814,7 @@
                                 </div>
                             )}
 
-                            {/* BLOG */}
+                            {/* BLOG, RANKING, ADMIN (Omitidos en esta lectura para ahorrar espacio, PERO incluyelos TODOS exactamente igual a lo que tenías) */}
                             {user && currentView === 'blog' && (
                                 <div className="animate-slide-up space-y-6">
                                     <div className="px-2">
@@ -776,7 +852,6 @@
                                 </div>
                             )}
 
-                            {/* RANKING */}
                             {user && currentView === 'ranking' && (
                                 <div className="animate-slide-up space-y-6">
                                     <div className="px-2">
@@ -794,6 +869,7 @@
                                             </thead>
                                             <tbody className="text-sm">
                                                 {dataLoading ? <tr><td colSpan="3"><Loader/></td></tr> : 
+                                                    rankingList.length === 0 ? <tr><td colSpan="3" className="p-6 text-center font-bold text-brand-dark/50">Aún no hay puntos registrados en el Ranking.</td></tr> :
                                                     [...rankingList].sort((a,b) => (Number(b.Puntos) || 0) - (Number(a.Puntos) || 0)).map((r, idx) => (
                                                         <tr key={idx} className={`border-b border-white/30 transition-colors ${idx === 0 ? 'bg-yellow-500/20' : 'hover:bg-white/50'}`}>
                                                             <td className="p-4 pl-6 text-center font-black text-xl text-brand-dark/40">#{idx + 1}</td>
@@ -808,7 +884,6 @@
                                 </div>
                             )}
 
-                            {/* PANEL ADMIN */}
                             {user && currentView === 'admin' && user?.role === 'admin' && (
                                 <div className="animate-slide-up space-y-6">
                                     <div className="px-2"><h2 className="text-4xl font-black uppercase leading-none mt-1">Panel Admin</h2></div>
@@ -818,7 +893,6 @@
                                         <button onClick={() => setAdminTab('blog')} className={`shrink-0 px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'blog' ? 'bg-brand-dark text-brand-bg1 shadow-lg' : 'glass-card text-brand-dark hover:bg-white'}`}>Nuevo Blog</button>
                                     </div>
 
-                                    {/* SUPER GESTOR DINÁMICO */}
                                     {adminTab === 'baseDatos' && (
                                         <div className="glass-card p-6 rounded-[2rem] border border-white/40">
                                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -855,13 +929,12 @@
                                         </div>
                                     )}
 
-                                    {/* VALIDACIÓN DE EVIDENCIAS */}
                                     {adminTab === 'evidencias' && (
-                                        <div className="glass-card p-6 rounded-[2rem] border border-white/40">
+                                        <div className="glass-card p-4 sm:p-6 rounded-[2rem] border border-white/40">
                                             <h3 className="text-xl font-black flex items-center gap-2 mb-6"><CheckCircle className="w-5 h-5"/> Retos Pendientes</h3>
                                             
                                             {adminEvalEvidencia ? (
-                                                <div className="animate-fade-in bg-white/60 p-6 rounded-2xl border border-brand-dark/10">
+                                                <div className="animate-fade-in bg-white/60 p-4 sm:p-6 rounded-2xl border border-brand-dark/10">
                                                     <button onClick={() => setAdminEvalEvidencia(null)} className="text-[10px] font-black uppercase text-brand-dark/50 hover:text-brand-dark mb-4 flex items-center gap-1"><X className="w-3 h-3"/> Volver</button>
                                                     <h4 className="font-black text-xl mb-1">{adminEvalEvidencia.Reto}</h4>
                                                     <p className="text-sm font-bold text-brand-dark/70 mb-4">{adminEvalEvidencia.Correo}</p>
@@ -869,9 +942,9 @@
                                                     {adminEvalEvidencia.URL_Evidencia && (
                                                         <div className="mb-6 rounded-xl overflow-hidden text-center flex flex-col items-center">
                                                             <a href={adminEvalEvidencia.URL_Evidencia} target="_blank" rel="noopener noreferrer" className="bg-blue-100 text-blue-700 px-6 py-3 rounded-full font-black text-xs uppercase hover:bg-blue-200 transition-colors flex items-center gap-2 shadow-sm border border-blue-200">
-                                                                Ver Evidencia Completa
+                                                                <ExternalLink className="w-4 h-4"/> Abrir Evidencia
                                                             </a>
-                                                            <p className="text-[10px] mt-2 text-brand-dark/50">Si es un video, abrirá en una pestaña nueva.</p>
+                                                            <p className="text-[10px] mt-2 text-brand-dark/50">Se abrirá la foto o video en una pestaña nueva para mejor visualización.</p>
                                                         </div>
                                                     )}
 
@@ -890,18 +963,18 @@
                                                     </form>
                                                 </div>
                                             ) : (
-                                                <div className="space-y-4">
+                                                <div className="space-y-3">
                                                     {adminEvidencias.filter(e => e.Estado === 'Pendiente').length === 0 ? (
                                                         <p className="text-center font-bold text-brand-dark/50 py-4">No hay evidencias pendientes por revisar.</p>
                                                     ) : (
                                                         adminEvidencias.filter(e => e.Estado === 'Pendiente').map((ev, i) => (
-                                                            <div key={i} className="bg-white/60 p-4 rounded-2xl border border-brand-dark/10 flex justify-between items-center shadow-sm">
+                                                            <div key={i} className="bg-white/60 p-3 rounded-2xl border border-brand-dark/10 flex justify-between items-center shadow-sm">
                                                                 <div>
-                                                                    <p className="text-xs font-black uppercase text-brand-dark/50 mb-1">{ev.Fecha}</p>
-                                                                    <p className="font-black text-brand-dark">{ev.Reto} <span className="text-[10px] bg-yellow-100 text-yellow-800 px-2 rounded-full ml-1">+{ev.Puntos}</span></p>
-                                                                    <p className="text-xs font-bold text-brand-dark/70">{ev.Correo}</p>
+                                                                    <p className="text-[10px] font-black uppercase text-brand-dark/50 mb-0.5">{ev.Fecha}</p>
+                                                                    <p className="font-black text-brand-dark text-sm leading-tight">{ev.Reto}</p>
+                                                                    <p className="text-[10px] font-bold text-brand-dark/70 mt-1">{ev.Correo}</p>
                                                                 </div>
-                                                                <button onClick={() => setAdminEvalEvidencia(ev)} className="bg-brand-dark text-brand-bg1 px-4 py-2 rounded-xl font-black text-xs uppercase shadow-md hover:scale-105">Evaluar</button>
+                                                                <button onClick={() => setAdminEvalEvidencia(ev)} className="shrink-0 bg-brand-dark text-brand-bg1 px-3 py-2 rounded-xl font-black text-[10px] uppercase shadow-md hover:scale-105 ml-2">Evaluar</button>
                                                             </div>
                                                         ))
                                                     )}
@@ -910,7 +983,7 @@
                                         </div>
                                     )}
 
-                                    {/* BLOG ADMIN CORREGIDO */}
+                                    {/* BLOG ADMIN REPARADO */}
                                     {adminTab === 'blog' && (
                                         <div className="glass-card p-6 rounded-[2rem] border border-white/40">
                                             <h3 className="text-xl font-black mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5"/> Publicar Noticia</h3>
@@ -920,7 +993,6 @@
                                                     <div><label className="block text-[10px] font-black uppercase mb-1">Etiqueta (Ej: Evento)</label><input type="text" name="etiqueta" required className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none text-sm" /></div>
                                                     <div><label className="block text-[10px] font-black uppercase mb-1">Autor</label><input type="text" name="autor" className="w-full p-3.5 rounded-xl bg-white/50 font-bold outline-none text-sm" placeholder="Elements" /></div>
                                                 </div>
-                                                {/* Eliminado el parámetro erróneo rows que causaba el quiebre */}
                                                 <div><label className="block text-[10px] font-black uppercase mb-1">Resumen</label><textarea name="descCorta" required className="w-full p-3.5 rounded-xl bg-white/50 outline-none font-medium resize-none text-sm h-20"></textarea></div>
                                                 <div><label className="block text-[10px] font-black uppercase mb-1">Contenido Completo</label><textarea name="contenido" required className="w-full p-3.5 rounded-xl bg-white/50 outline-none font-medium resize-none text-sm h-32"></textarea></div>
                                                 <div>
@@ -940,26 +1012,26 @@
 
                             {user && <BottomNav />}
 
-                            {/* MODAL UPLOAD RETO CON PREVIEW */}
+                            {/* MODAL UPLOAD RETO */}
                             {uploadingReto && (
                                 <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in">
                                     <div className="bg-[#f0e3d1] w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl relative animate-zoom-in border border-white/20">
                                         <button type="button" onClick={() => {setUploadingReto(null); setPreviewImgUrl(null);}} className="absolute top-4 right-4 bg-brand-dark/10 text-brand-dark p-2 rounded-full hover:bg-brand-dark/20"><X className="w-4 h-4" /></button>
                                         <h3 className="text-xl font-black uppercase mb-2 text-center text-brand-dark">Evidencia</h3>
-                                        <p className="text-xs font-bold text-brand-dark/60 mb-6 text-center leading-tight">{uploadingReto.Titulo}</p>
+                                        <p className="text-[10px] font-bold text-brand-dark/60 mb-6 text-center leading-tight uppercase">{uploadingReto.Titulo}</p>
                                         
                                         <form onSubmit={handleEvidenceSubmit} className="space-y-4">
                                             {previewImgUrl ? (
                                                 <div className="w-full flex flex-col items-center gap-3">
-                                                    <div className="w-full h-40 bg-black/5 rounded-2xl border border-black/10 overflow-hidden flex items-center justify-center relative group">
-                                                        <img src={previewImgUrl} className="max-w-full max-h-full object-contain" />
-                                                        <button type="button" onClick={() => setPreviewImgUrl(null)} className="absolute inset-0 bg-black/50 text-white font-black text-xs uppercase opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">Cambiar Archivo</button>
+                                                    <div className="w-full h-48 bg-black/5 rounded-2xl border border-black/10 overflow-hidden flex items-center justify-center relative group">
+                                                        <img src={previewImgUrl} className="w-full h-full object-cover" />
+                                                        <button type="button" onClick={() => setPreviewImgUrl(null)} className="absolute inset-0 bg-black/50 text-white font-black text-xs uppercase opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">Cambiar Foto</button>
                                                     </div>
                                                 </div>
                                             ) : (
                                                 <div className="relative w-full h-32 rounded-2xl bg-white/60 border-2 border-dashed border-brand-dark/30 hover:border-brand-dark transition-colors flex flex-col items-center justify-center gap-2 font-black cursor-pointer uppercase text-xs tracking-wider">
                                                     <Camera className="w-8 h-8 text-brand-dark/50" />
-                                                    <span className="text-brand-dark/50 text-center px-4">Selecciona foto o video</span>
+                                                    <span className="text-brand-dark/50 text-center px-4">Toca para tomar foto</span>
                                                     <input type="file" name="imagen" accept="image/*,video/*" required onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                                                 </div>
                                             )}
@@ -970,7 +1042,7 @@
                                 </div>
                             )}
 
-                            {/* MODAL GESTOR DINÁMICO ADMIN */}
+                            {/* MODAL GESTOR DINÁMICO */}
                             {editingGenericRow && (
                                 <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in">
                                     <div className="bg-[#f0e3d1] w-full max-w-md rounded-[2.5rem] p-6 shadow-2xl relative animate-zoom-in max-h-[90vh] overflow-y-auto hide-scroll border border-white/20">
@@ -1020,22 +1092,32 @@
                                 </div>
                             )}
 
-                            {/* MODAL REPRODUCTOR DE VIDEO CON COMPLETADO */}
-                            {selectedVideo && (
-                                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in" onClick={() => setSelectedVideo(null)}>
-                                    <div className="bg-black w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl relative aspect-video flex flex-col" onClick={e => e.stopPropagation()}>
-                                        <div className="absolute top-4 right-4 z-30 flex gap-2">
-                                            <button onClick={completeVideoChallenge} disabled={loading} className="bg-green-500/90 text-white px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-wider hover:bg-green-500 backdrop-blur-md shadow-lg">{loading ? '...' : 'Terminé de verlo (+ Pts)'}</button>
-                                            <button onClick={() => setSelectedVideo(null)} className="bg-black/50 text-white p-2 rounded-full hover:bg-black transition-colors"><X className="w-5 h-5" /></button>
-                                        </div>
-                                        <div className="flex-1 w-full h-full relative">
-                                            {selectedVideo.type === 'youtube' && <iframe src={`https://www.youtube.com/embed/${selectedVideo.id}?autoplay=1`} className="absolute inset-0 w-full h-full border-0" allow="autoplay; fullscreen"></iframe>}
-                                            {selectedVideo.type === 'drive' && <iframe src={`https://drive.google.com/file/d/${selectedVideo.id}/preview`} className="absolute inset-0 w-full h-full border-0" allow="autoplay; fullscreen"></iframe>}
-                                            {!selectedVideo.type && <div className="absolute inset-0 flex items-center justify-center text-white/50 font-bold text-sm">Video no disponible.</div>}
+                            {/* MODAL REPRODUCTOR DE VIDEO */}
+                            {selectedVideo && (() => {
+                                const videoReto = activeChallenges.find(r => String(r.Titulo).toLowerCase().includes('video'));
+                                const isReclamado = videoReto && evidenciasList.some(e => e.Reto === videoReto.Titulo && e.URL_Evidencia === selectedVideo.id && e.Estado === 'Aprobado');
+                                
+                                return (
+                                    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in" onClick={() => setSelectedVideo(null)}>
+                                        <div className="bg-black w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl relative aspect-video flex flex-col" onClick={e => e.stopPropagation()}>
+                                            <div className="absolute top-4 right-4 z-30 flex gap-2">
+                                                {isReclamado ? (
+                                                    <div className="bg-green-500/90 text-white px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-wider backdrop-blur-md shadow-lg flex items-center gap-1"><CheckCircle className="w-3 h-3"/> Reclamado</div>
+                                                ) : (
+                                                    videoReto && <button onClick={completeVideoChallenge} disabled={loading} className="bg-orange-500/90 text-white px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-wider hover:bg-orange-600 backdrop-blur-md shadow-lg">{loading ? '...' : 'Terminé de verlo (+ Pts)'}</button>
+                                                )}
+                                                <button onClick={() => setSelectedVideo(null)} className="bg-black/50 text-white p-2 rounded-full hover:bg-black transition-colors"><X className="w-5 h-5" /></button>
+                                            </div>
+                                            <div className="flex-1 w-full h-full relative">
+                                                {selectedVideo.type === 'youtube' && <iframe src={`https://www.youtube.com/embed/${selectedVideo.id}?autoplay=1&rel=0&modestbranding=1`} className="absolute inset-0 w-full h-full border-0" allow="autoplay; fullscreen"></iframe>}
+                                                {selectedVideo.type === 'drive' && <iframe src={`https://drive.google.com/file/d/${selectedVideo.id}/preview`} className="absolute inset-0 w-full h-full border-0" allow="autoplay; fullscreen"></iframe>}
+                                                {!selectedVideo.type && <div className="absolute inset-0 flex items-center justify-center text-white/50 font-bold text-sm">Video no disponible.</div>}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            )}
+                                );
+                            })()}
+
                         </div>
                     </div>
                 </div>
