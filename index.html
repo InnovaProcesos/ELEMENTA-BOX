@@ -19,7 +19,6 @@
 </head>
 <body class="bg-[#E5D3BD] font-sans text-brand-dark min-h-[100dvh]">
     
-    <!-- Contenedor de Formas de Fondo - Separado para no romper el 'Sticky' -->
     <div class="fixed inset-0 z-0 pointer-events-none">
         <div class="absolute top-0 -left-10 w-72 h-72 bg-[#f4e6d4] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob"></div>
         <div class="absolute top-40 right-0 w-80 h-80 bg-[#cbb092] rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob" style="animation-delay: 2s;"></div>
@@ -104,9 +103,7 @@
         .color-sin { color: #eab308; background-color: #eab308; }
         `;
 
-        // ==========================================
         // URL DE APPS SCRIPT
-        // ==========================================
         const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_6zQAaeVwPK_E76DZ4ipxU-vZcU3_Qqi0hv-pbcX-ezVpxNNLaUATL4j-jcmbc94-/exec";
 
         const OPCIONES_OBSERVACION = [
@@ -139,6 +136,13 @@
         const defaultSkills = {};
         movimientosGimnasia.forEach(m => defaultSkills[m] = 'azul');
         movimientosLevantamiento.forEach(m => defaultSkills[m] = 0);
+
+        // FUNCIÓN CLAVE: Extrae las propiedades sin importar cómo las escribió el Admin en Excel
+        const getProp = (obj, propName) => {
+            if (!obj) return undefined;
+            const key = Object.keys(obj).find(k => k.trim().toLowerCase() === propName.trim().toLowerCase());
+            return key ? obj[key] : undefined;
+        };
 
         const apiCall = async (action, payload) => {
             try {
@@ -215,14 +219,13 @@
             const [errorMsg, setErrorMsg] = useState('');
             const [successMsg, setSuccessMsg] = useState('');
 
-            // Data States
             const [videos, setVideos] = useState([]);
             const [blogPosts, setBlogPosts] = useState([]);
             const [misPuntos, setMisPuntos] = useState(0);
             const [retosList, setRetosList] = useState([]);
             const [rankingList, setRankingList] = useState([]);
+            const [wodsList, setWodsList] = useState([]); 
             
-            // Interaction States
             const [searchTerm, setSearchTerm] = useState('');
             const [expandedCategories, setExpandedCategories] = useState({});
             const [selectedPost, setSelectedPost] = useState(null); 
@@ -230,19 +233,16 @@
             const [uploadingReto, setUploadingReto] = useState(null);
             const [previewFile, setPreviewFile] = useState(null);
 
-            // Skills (Home)
             const [skillTab, setSkillTab] = useState('gimnasia'); 
             const [userSkills, setUserSkills] = useState(defaultSkills); 
             const [maxSkills, setMaxSkills] = useState(defaultSkills);
 
-            // Admin States
             const [adminTab, setAdminTab] = useState('evidencias'); 
             const [adminSheetData, setAdminSheetData] = useState([]);
             const [editingPayment, setEditingPayment] = useState(null);
             const [adminEvidencias, setAdminEvidencias] = useState([]);
             const [adminEvalEvidencia, setAdminEvalEvidencia] = useState(null);
 
-            // Auto-login
             useEffect(() => {
                 const sessionUser = localStorage.getItem('elementsSessionV8');
                 if(sessionUser) {
@@ -277,7 +277,8 @@
                     setMaxSkills(loadedSkills); 
 
                     if (res.videos && res.videos.length > 0) {
-                        setExpandedCategories({ [res.videos[0].Categoria || 'N1']: true });
+                        const firstCat = getProp(res.videos[0], 'Categoria') || 'N1';
+                        setExpandedCategories({ [firstCat]: true });
                     }
 
                     if (currentUser.role === 'admin') {
@@ -353,9 +354,7 @@
             const handleSaveSkillsSilently = async () => {
                 setLoading(true); setErrorMsg(''); setSuccessMsg('');
                 const res = await apiCall('updateSkillsWithEvidence', {
-                    correo: user.correo || user.email,
-                    skills: userSkills,
-                    base64: ''
+                    correo: user.correo || user.email, skills: userSkills, base64: ''
                 });
                 if (res.status === 'success') {
                     setSuccessMsg('Progreso guardado (Las marcas inferiores no otorgan puntos ni requieren evidencia).');
@@ -416,7 +415,15 @@
                 const estado = e.target.decision.value;
                 const observacion = e.target.observacion.value;
                 if (estado === 'Rechazado' && !observacion) { alert("Debe seleccionar una observación para rechazar."); setLoading(false); return; }
-                const res = await apiCall('evaluateEvidence', { rowIndex: adminEvalEvidencia._rowIndex, estado: estado, observacion: observacion, puntos: estado === 'Aprobado' ? adminEvalEvidencia.Puntos : 0, correo: adminEvalEvidencia.Correo });
+                
+                const res = await apiCall('evaluateEvidence', { 
+                    rowIndex: adminEvalEvidencia._rowIndex, 
+                    estado: estado, 
+                    observacion: observacion, 
+                    puntos: estado === 'Aprobado' ? getProp(adminEvalEvidencia, 'Puntos') : 0, 
+                    correo: getProp(adminEvalEvidencia, 'Correo') || getProp(adminEvalEvidencia, 'Atleta') 
+                });
+                
                 if (res.status === 'success') { setAdminEvalEvidencia(null); loadAppData(user); } else { alert(res.message); }
                 setLoading(false);
             };
@@ -426,15 +433,6 @@
                 const formData = new FormData(e.target);
                 const res = await apiCall('updatePayment', { rowIndex: editingPayment._rowIndex, data: Object.fromEntries(formData.entries()) });
                 if (res.status === 'success') { setSuccessMsg('Actualizado correctamente.'); setTimeout(() => { setSuccessMsg(''); setEditingPayment(null); loadAppData(user); }, 1500); } else { setErrorMsg(res.message); }
-                setLoading(false);
-            };
-
-            const handleAdminAddBlog = async (e) => {
-                e.preventDefault(); setLoading(true); setSuccessMsg('Publicando...');
-                const formData = new FormData(e.target);
-                const res = await apiCall('addBlog', Object.fromEntries(formData.entries()));
-                if (res.status === 'success') { setSuccessMsg('Publicado.'); e.target.reset(); setTimeout(() => { setSuccessMsg(''); loadAppData(user); }, 1500); } 
-                else { setErrorMsg(res.message); setTimeout(() => setErrorMsg(''), 3000); }
                 setLoading(false);
             };
 
@@ -453,9 +451,9 @@
 
             const groupedFilteredVideos = useMemo(() => {
                 const lowerSearch = String(searchTerm || '').toLowerCase();
-                const filtered = videos?.filter(v => String(v?.Nombre || '').toLowerCase().includes(lowerSearch) || String(v?.Descripcion || '').toLowerCase().includes(lowerSearch)) || [];
+                const filtered = videos?.filter(v => String(getProp(v, 'Nombre') || '').toLowerCase().includes(lowerSearch) || String(getProp(v, 'Descripcion') || '').toLowerCase().includes(lowerSearch)) || [];
                 return filtered.reduce((acc, v) => {
-                    const cat = v?.Categoria || 'General';
+                    const cat = getProp(v, 'Categoria') || 'General';
                     if (!acc[cat]) acc[cat] = []; acc[cat].push(v); return acc;
                 }, {});
             }, [videos, searchTerm]);
@@ -476,9 +474,6 @@
                 </div>
             );
 
-            // ==========================================
-            // TARJETA FLOTANTE Y REDISEÑADA
-            // ==========================================
             const ProfileSuperCard = () => (
                 <div className="sticky top-[76px] z-[90] glass-card rounded-[1.5rem] p-5 flex flex-col gap-5 border border-white/60 shadow-lg mb-6 transition-all">
                     <div className="flex justify-between items-center">
@@ -528,25 +523,26 @@
                 </div>
             );
 
+            // Menu blindado para evitar ocultamiento en teléfonos
             const BottomNav = () => (
-                <div className="fixed bottom-0 left-0 w-full bg-brand-dark backdrop-blur-lg shadow-2xl z-[9999] border-t border-brand-bg2 pb-[env(safe-area-inset-bottom)]">
-                    <div className="flex justify-between items-center max-w-md mx-auto p-2 px-4">
+                <div className="fixed bottom-0 left-0 w-full bg-brand-dark backdrop-blur-lg shadow-[0_-10px_40px_rgba(0,0,0,0.2)] z-[99999] border-t-2 border-brand-bg2 pb-[env(safe-area-inset-bottom)]">
+                    <div className="flex justify-between items-center max-w-md mx-auto p-3 px-6">
                         {['home', 'wod', 'academy', 'blog'].map(view => {
                             const isApp = currentView === view;
                             const icons = { home: Home, wod: Calendar, academy: Video, blog: BookOpen };
-                            const labels = { home: 'Home', wod: 'WOD', academy: 'Academia', blog: 'Eventos' };
+                            const labels = { home: 'Home', wod: 'WOD', academy: 'Videos', blog: 'Eventos' };
                             const Icon = icons[view];
                             return (
-                                <button key={view} onClick={() => handleNavigation(view)} className={`relative flex items-center justify-center p-3 rounded-2xl transition-all duration-300 ${isApp ? 'bg-brand-bg1 text-brand-dark shadow-md' : 'text-white hover:text-white/80 flex-1'}`}>
-                                    <Icon className="w-5 h-5" />
-                                    {isApp && <span className="ml-1.5 text-xs font-black uppercase tracking-wider animate-fade-in">{labels[view]}</span>}
+                                <button key={view} onClick={() => handleNavigation(view)} className={`relative flex flex-col items-center justify-center gap-1.5 transition-all duration-300 ${isApp ? 'text-brand-bg1 scale-110' : 'text-white/50 hover:text-white/80'}`}>
+                                    <Icon className="w-6 h-6" />
+                                    <span className="text-[9px] font-black uppercase tracking-widest">{labels[view]}</span>
                                 </button>
                             );
                         })}
                         {user?.role === 'admin' && (
-                            <button onClick={() => handleNavigation('admin')} className={`relative flex items-center justify-center p-3 rounded-2xl transition-all duration-300 ${currentView === 'admin' ? 'bg-brand-bg1 text-brand-dark shadow-md' : 'text-white hover:text-white/80 flex-1'}`}>
-                                <Database className="w-5 h-5" />
-                                {currentView === 'admin' && <span className="ml-1.5 text-xs font-black uppercase tracking-wider animate-fade-in">Admin</span>}
+                            <button onClick={() => handleNavigation('admin')} className={`relative flex flex-col items-center justify-center gap-1.5 transition-all duration-300 ${currentView === 'admin' ? 'text-brand-bg1 scale-110' : 'text-white/50 hover:text-white/80'}`}>
+                                <Database className="w-6 h-6" />
+                                <span className="text-[9px] font-black uppercase tracking-widest">Admin</span>
                             </button>
                         )}
                     </div>
@@ -554,17 +550,15 @@
             );
 
             return (
-                <div className="pb-32 min-h-screen">
+                <div className="pb-32">
                     <style dangerouslySetInnerHTML={{ __html: customStyles }} />
 
                     {(user || currentView !== 'login') && <Topbar />}
 
                     <div className="max-w-4xl mx-auto px-4 pt-6">
                         
-                        {/* PROFILE CARD FLOTANTE EN TODAS LAS VISTAS (MENOS RANKING/LOGIN) */}
                         {user && currentView !== 'login' && currentView !== 'register' && currentView !== 'ranking' && <ProfileSuperCard />}
 
-                        {/* LOGIN Y REGISTRO */}
                         {!user && (currentView === 'login' || currentView === 'register') && (
                             <div className="flex flex-col items-center justify-center animate-slide-up py-10">
                                 <div className="mb-8 flex flex-col items-center">
@@ -625,7 +619,6 @@
                             </div>
                         )}
 
-                        {/* HOME: SKILLS / HABILIDADES */}
                         {user && currentView === 'home' && (
                             <div className="animate-slide-up space-y-4">
                                 {errorMsg && <div className="bg-red-500/10 text-red-700 p-3 rounded-xl text-sm font-bold text-center border border-red-500/20">{errorMsg}</div>}
@@ -643,7 +636,7 @@
                                                 <Target className="w-6 h-6 text-brand-dark"/>
                                                 <h3 className="font-black text-xl uppercase tracking-wider text-brand-dark">Gimnasia</h3>
                                             </div>
-                                            <p className="text-[10px] font-bold text-brand-dark/60 bg-white/50 p-3 rounded-xl leading-tight">Tu récord oficial es la base. Si solicitas validar una banda de mayor dificultad, requerirá una evidencia fotográfica o en video.</p>
+                                            <p className="text-[10px] font-bold text-brand-dark/60 bg-white/50 p-3 rounded-xl leading-tight">Tu récord oficial es la base. Si solicitas validar una banda de mayor dificultad, requerirá evidencia en foto o video.</p>
                                             
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                                                 {movimientosGimnasia.map((mov, idx) => (
@@ -716,7 +709,6 @@
                             </div>
                         )}
 
-                        {/* RANKING GLOBAL */}
                         {user && currentView === 'ranking' && (
                             <div className="animate-slide-up space-y-6">
                                 <div className="px-2 flex items-center justify-between mt-4">
@@ -755,7 +747,6 @@
                             </div>
                         )}
 
-                        {/* WOD Y RETOS */}
                         {user && currentView === 'wod' && (
                             <div className="animate-slide-up space-y-6">
                                 <div className="px-2 mt-4">
@@ -776,11 +767,11 @@
                                                 <div key={idx} className="glass-card rounded-[1.5rem] p-6 border border-brand-dark/10 shadow-md relative overflow-hidden group">
                                                     <div className="absolute top-0 left-0 w-2 h-full bg-brand-dark"></div>
                                                     <div className="flex justify-between items-start mb-4">
-                                                        <h3 className="text-2xl font-black uppercase text-brand-dark">{wod?.Titulo || 'WOD'}</h3>
-                                                        <span className="text-xs font-bold text-brand-dark/50 bg-white/50 px-3 py-1 rounded-full">{formatearFecha(wod?.Fecha)}</span>
+                                                        <h3 className="text-2xl font-black uppercase text-brand-dark">{getProp(wod, 'Titulo') || 'WOD'}</h3>
+                                                        <span className="text-xs font-bold text-brand-dark/50 bg-white/50 px-3 py-1 rounded-full">{formatearFecha(getProp(wod, 'Fecha'))}</span>
                                                     </div>
                                                     <div className="bg-white/40 p-5 rounded-xl font-medium text-brand-dark/90 whitespace-pre-wrap leading-relaxed border border-white/50 text-sm">
-                                                        {wod?.Descripcion || 'Sin descripción'}
+                                                        {getProp(wod, 'Descripcion') || 'Sin descripción'}
                                                     </div>
                                                 </div>
                                             ))
@@ -794,11 +785,11 @@
                                                     return (
                                                     <div key={idx} className="bg-white/60 p-5 rounded-2xl border border-brand-dark/5 flex flex-col h-full shadow-sm">
                                                         <div className="flex justify-between items-start mb-2">
-                                                            <h4 className="font-black uppercase text-sm leading-tight text-brand-dark">{reto?.Titulo || 'Reto'}</h4>
-                                                            <span className="bg-green-100 text-green-700 font-black text-[10px] px-2 py-1 rounded-full uppercase tracking-wider border border-green-200">+{reto?.Puntos || 0} Pts</span>
+                                                            <h4 className="font-black uppercase text-sm leading-tight text-brand-dark">{getProp(reto, 'Titulo') || 'Reto'}</h4>
+                                                            <span className="bg-green-100 text-green-700 font-black text-[10px] px-2 py-1 rounded-full uppercase tracking-wider border border-green-200">+{getProp(reto, 'Puntos') || 0} Pts</span>
                                                         </div>
-                                                        <p className="text-xs font-bold text-brand-dark/60 mb-4 flex-1 leading-relaxed">{reto?.Descripcion || ''}</p>
-                                                        <button onClick={() => setUploadingReto(reto)} className="w-full bg-brand-dark text-brand-bg1 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-md flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform">
+                                                        <p className="text-xs font-bold text-brand-dark/60 mb-4 flex-1 leading-relaxed">{getProp(reto, 'Descripcion') || ''}</p>
+                                                        <button onClick={() => setUploadingReto({ Titulo: getProp(reto, 'Titulo'), Puntos: getProp(reto, 'Puntos') })} className="w-full bg-brand-dark text-brand-bg1 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-md flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform">
                                                             <Upload className="w-4 h-4"/> Subir Evidencia
                                                         </button>
                                                     </div>
@@ -810,7 +801,6 @@
                             </div>
                         )}
 
-                        {/* ACADEMIA DE VIDEOS */}
                         {user && currentView === 'academy' && (
                             <div className="animate-slide-up space-y-6">
                                 <div className="px-2 mt-4">
@@ -835,12 +825,12 @@
                                                 {expandedCategories[category] && (
                                                     <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-6 bg-black/5 animate-fade-in border-t border-white/20">
                                                         {groupedFilteredVideos[category].map((vid, vIdx) => {
-                                                            const videoInfo = getVideoData(vid?.URL || '');
+                                                            const videoInfo = getVideoData(getProp(vid, 'URL') || '');
                                                             return (
-                                                                <div key={vIdx} onClick={() => setSelectedVideo({ ...videoInfo, Nombre: vid?.Nombre })} className="bg-white rounded-3xl overflow-hidden shadow-sm cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-brand-dark/5 flex flex-col group relative">
+                                                                <div key={vIdx} onClick={() => setSelectedVideo({ ...videoInfo, Nombre: getProp(vid, 'Nombre') })} className="bg-white rounded-3xl overflow-hidden shadow-sm cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-brand-dark/5 flex flex-col group relative">
                                                                     <div className="relative aspect-video bg-brand-dark flex items-center justify-center overflow-hidden">
                                                                         {videoInfo.type === 'youtube' ? (
-                                                                            <img src={`https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`} className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500 group-hover:scale-105" alt={vid?.Nombre || ''} />
+                                                                            <img src={`https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`} className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500 group-hover:scale-105" alt={getProp(vid, 'Nombre') || ''} />
                                                                         ) : (
                                                                             <Video className="w-12 h-12 text-white/30" />
                                                                         )}
@@ -850,8 +840,8 @@
                                                                         </div>
                                                                     </div>
                                                                     <div className="p-5 flex-1 flex flex-col">
-                                                                        <h4 className="font-black text-xl leading-tight uppercase mb-2 text-brand-dark">{vid?.Nombre || ''}</h4>
-                                                                        <p className="text-sm text-brand-dark/70 font-medium line-clamp-2 mt-auto">{vid?.Descripcion || ''}</p>
+                                                                        <h4 className="font-black text-xl leading-tight uppercase mb-2 text-brand-dark">{getProp(vid, 'Nombre') || ''}</h4>
+                                                                        <p className="text-sm text-brand-dark/70 font-medium line-clamp-2 mt-auto">{getProp(vid, 'Descripcion') || ''}</p>
                                                                     </div>
                                                                 </div>
                                                             )
@@ -865,7 +855,6 @@
                             </div>
                         )}
 
-                        {/* BLOG / EVENTOS */}
                         {user && currentView === 'blog' && (
                             <div className="animate-slide-up space-y-6">
                                 <div className="px-2 mt-4">
@@ -876,22 +865,23 @@
                                     <div className="grid grid-cols-1 gap-8">
                                         {blogPosts?.map((post, idx) => {
                                             if(!post) return null;
+                                            const urlImg = getProp(post, 'URL_Imagen');
                                             return (
                                                 <div key={idx} onClick={() => setSelectedPost({...post})} className="glass-card rounded-[2rem] overflow-hidden group hover:shadow-2xl transition-all duration-300 relative cursor-pointer flex flex-col border border-white/40">
-                                                    {post?.URL_Imagen && (
+                                                    {urlImg && (
                                                         <div className="h-48 sm:h-72 w-full relative overflow-hidden bg-brand-dark">
-                                                            <img src={post.URL_Imagen} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-90" alt="News" />
+                                                            <img src={urlImg} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-90" alt="News" />
                                                         </div>
                                                     )}
                                                     <div className="p-6 bg-white/40 flex-1 flex flex-col">
                                                         <div className="flex justify-between items-start mb-3">
-                                                            <span className="bg-brand-dark text-brand-bg1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">{post?.Etiqueta || 'Evento'}</span>
-                                                            <span className="text-[10px] font-bold text-brand-dark/50 uppercase">{formatearFecha(post?.Fecha)}</span>
+                                                            <span className="bg-brand-dark text-brand-bg1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">{getProp(post, 'Etiqueta') || 'Evento'}</span>
+                                                            <span className="text-[10px] font-bold text-brand-dark/50 uppercase">{formatearFecha(getProp(post, 'Fecha'))}</span>
                                                         </div>
-                                                        <h3 className="text-2xl font-black leading-tight mb-2">{post?.Titulo || ''}</h3>
-                                                        <p className="font-medium text-brand-dark/70 text-sm mb-4 line-clamp-2">{post?.['Descripcion Corta'] || post?.Descripcion || ''}</p>
+                                                        <h3 className="text-2xl font-black leading-tight mb-2">{getProp(post, 'Titulo') || ''}</h3>
+                                                        <p className="font-medium text-brand-dark/70 text-sm mb-4 line-clamp-2">{getProp(post, 'Descripcion Corta') || getProp(post, 'Descripcion') || ''}</p>
                                                         <div className="mt-auto pt-4 border-t border-brand-dark/10 flex items-center justify-between">
-                                                            <span className="text-xs font-bold text-brand-dark/60">{post?.Autor || 'Elementa'}</span>
+                                                            <span className="text-xs font-bold text-brand-dark/60">{getProp(post, 'Autor') || 'Elementa'}</span>
                                                             <span className="text-xs font-black uppercase flex items-center">Leer más <Play className="w-3 h-3 ml-1"/></span>
                                                         </div>
                                                     </div>
@@ -903,7 +893,6 @@
                             </div>
                         )}
 
-                        {/* PANEL ADMIN */}
                         {user && currentView === 'admin' && user?.role === 'admin' && (
                             <div className="animate-slide-up space-y-6">
                                 <div className="px-2 mt-4"><h2 className="text-4xl font-black uppercase leading-none mt-1">Panel Admin</h2></div>
@@ -912,7 +901,6 @@
                                     <button onClick={() => setAdminTab('validacionPagos')} className={`shrink-0 px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'validacionPagos' ? 'bg-brand-dark text-brand-bg1 shadow-lg' : 'glass-card text-brand-dark hover:bg-white'}`}>Gestión Atletas</button>
                                 </div>
 
-                                {/* GESTIÓN DE ATLETAS (INFO PERSONAS) */}
                                 {adminTab === 'validacionPagos' && (
                                     <div className="glass-card p-4 sm:p-6 rounded-[2rem] border border-white/40">
                                         <div className="flex justify-between items-center mb-6">
@@ -923,9 +911,9 @@
                                             <div className="space-y-3">
                                                 {adminSheetData?.map((row, idx) => {
                                                     if (!row) return null;
-                                                    const nombreCompleto = `${row.Nombres || ''} ${row.Apellidos || ''}`.trim() || row.Correo || 'Atleta Sin Nombre';
-                                                    const caducidad = row.Caducidad || row['Fecha de Caducidad'] || '';
-                                                    const estado = String(row.Estado || '').trim().toLowerCase() === 'activo' ? 'Activo' : 'Inactivo';
+                                                    const nombreCompleto = `${getProp(row, 'Nombres') || ''} ${getProp(row, 'Apellidos') || ''}`.trim() || getProp(row, 'Correo') || 'Atleta Sin Nombre';
+                                                    const caducidad = getProp(row, 'Caducidad') || getProp(row, 'Fecha de Caducidad') || '';
+                                                    const estado = String(getProp(row, 'Estado') || '').trim().toLowerCase() === 'activo' ? 'Activo' : 'Inactivo';
                                                     const infoDias = calcularDias(caducidad);
                                                     
                                                     return (
@@ -933,11 +921,11 @@
                                                             <div className="flex-1">
                                                                 <div className="flex items-center gap-2">
                                                                     <h4 className="font-black text-brand-dark uppercase text-sm">{nombreCompleto}</h4>
-                                                                    <span className="text-[9px] bg-black/5 px-2 py-0.5 rounded font-black text-brand-dark/50">CC: {row.Cedula || 'N/A'}</span>
+                                                                    <span className="text-[9px] bg-black/5 px-2 py-0.5 rounded font-black text-brand-dark/50">CC: {getProp(row, 'Cedula') || 'N/A'}</span>
                                                                 </div>
                                                                 <div className="flex flex-wrap gap-2 mt-2 items-center">
                                                                     <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${estado === 'Activo' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{estado}</span>
-                                                                    <span className="text-[10px] font-bold text-brand-dark/70 bg-black/5 px-2 py-1 rounded border border-black/5">{row.Plan || 'Sin Plan'}</span>
+                                                                    <span className="text-[10px] font-bold text-brand-dark/70 bg-black/5 px-2 py-1 rounded border border-black/5">{getProp(row, 'Plan') || 'Sin Plan'}</span>
                                                                     <span className={`text-[10px] font-black uppercase px-2 py-1 bg-white rounded border border-brand-dark/5 ${infoDias.color}`}>{infoDias.texto} ({formatearFecha(caducidad)})</span>
                                                                 </div>
                                                             </div>
@@ -950,7 +938,6 @@
                                     </div>
                                 )}
 
-                                {/* VALIDACIÓN DE EVIDENCIAS */}
                                 {adminTab === 'evidencias' && (
                                     <div className="glass-card p-4 sm:p-6 rounded-[2rem] border border-white/40">
                                         <h3 className="text-xl font-black flex items-center gap-2 mb-6"><CheckCircle className="w-5 h-5"/> Retos y Mejoras Pendientes</h3>
@@ -958,17 +945,17 @@
                                         {adminEvalEvidencia ? (
                                             <div className="animate-fade-in bg-white/60 p-4 sm:p-6 rounded-2xl border border-brand-dark/10">
                                                 <button onClick={() => setAdminEvalEvidencia(null)} className="text-[10px] font-black uppercase text-brand-dark/50 hover:text-brand-dark mb-4 flex items-center gap-1"><X className="w-3 h-3"/> Volver a la lista</button>
-                                                <h4 className="font-black text-xl mb-1 uppercase tracking-wider">{adminEvalEvidencia.Reto}</h4>
-                                                <p className="text-sm font-bold text-brand-dark/70 mb-4">{adminEvalEvidencia.Correo}</p>
+                                                <h4 className="font-black text-xl mb-1 uppercase tracking-wider">{getProp(adminEvalEvidencia, 'Reto')}</h4>
+                                                <p className="text-sm font-bold text-brand-dark/70 mb-4">{getProp(adminEvalEvidencia, 'Correo')}</p>
                                                 
                                                 <div className="mb-6 rounded-xl overflow-hidden text-center flex flex-col items-center">
-                                                    {adminEvalEvidencia.URL_Evidencia && adminEvalEvidencia.URL_Evidencia.indexOf('Base64') === -1 ? (
-                                                        <a href={adminEvalEvidencia.URL_Evidencia} target="_blank" rel="noopener noreferrer" className="bg-blue-100 text-blue-700 px-6 py-3 rounded-full font-black text-xs uppercase hover:bg-blue-200 transition-colors flex items-center gap-2 shadow-sm border border-blue-200">
+                                                    {getProp(adminEvalEvidencia, 'URL_Evidencia') && getProp(adminEvalEvidencia, 'URL_Evidencia').indexOf('Base64') === -1 ? (
+                                                        <a href={getProp(adminEvalEvidencia, 'URL_Evidencia')} target="_blank" rel="noopener noreferrer" className="bg-blue-100 text-blue-700 px-6 py-3 rounded-full font-black text-xs uppercase hover:bg-blue-200 transition-colors flex items-center gap-2 shadow-sm border border-blue-200">
                                                             <ExternalLink className="w-4 h-4"/> Ver Evidencia
                                                         </a>
                                                     ) : (
                                                         <div className="bg-brand-dark/10 w-full h-32 rounded-xl flex items-center justify-center font-bold text-brand-dark/50 border border-brand-dark/20 border-dashed text-center px-4">
-                                                            <Camera className="w-6 h-6 mr-2 opacity-50 shrink-0"/> {adminEvalEvidencia.URL_Evidencia || 'Sin Evidencia Adjunta'}
+                                                            <Camera className="w-6 h-6 mr-2 opacity-50 shrink-0"/> {getProp(adminEvalEvidencia, 'URL_Evidencia') || 'Sin Evidencia Adjunta'}
                                                         </div>
                                                     )}
                                                 </div>
@@ -983,7 +970,7 @@
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-3 pt-4 border-t border-brand-dark/10">
                                                         <button type="submit" name="decision" value="Rechazado" disabled={loading} className="w-full bg-red-100 text-red-700 p-4 rounded-xl font-black uppercase hover:bg-red-200 transition-colors shadow-sm">{loading ? '...' : 'Rechazar'}</button>
-                                                        <button type="submit" name="decision" value="Aprobado" disabled={loading} className="w-full bg-green-500 text-white p-4 rounded-xl font-black uppercase hover:bg-green-600 transition-colors shadow-md">{loading ? '...' : `Aprobar (+${adminEvalEvidencia.Puntos || 0})`}</button>
+                                                        <button type="submit" name="decision" value="Aprobado" disabled={loading} className="w-full bg-green-500 text-white p-4 rounded-xl font-black uppercase hover:bg-green-600 transition-colors shadow-md">{loading ? '...' : `Aprobar (+${getProp(adminEvalEvidencia, 'Puntos') || 0})`}</button>
                                                     </div>
                                                 </form>
                                             </div>
@@ -998,11 +985,11 @@
                                                         <div key={i} className="bg-white/60 p-4 rounded-2xl border border-brand-dark/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm">
                                                             <div>
                                                                 <div className="flex items-center gap-2 mb-1">
-                                                                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-orange-100 text-orange-700`}>{ev.Estado || 'Pendiente'}</span>
-                                                                    <span className="text-[10px] font-black uppercase text-brand-dark/50">{formatearFecha(ev.Fecha)}</span>
+                                                                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-orange-100 text-orange-700`}>{getProp(ev, 'Estado') || 'Pendiente'}</span>
+                                                                    <span className="text-[10px] font-black uppercase text-brand-dark/50">{formatearFecha(getProp(ev, 'Fecha'))}</span>
                                                                 </div>
-                                                                <p className="font-black text-brand-dark text-sm leading-tight uppercase">{ev.Reto || 'Evidencia'}</p>
-                                                                <p className="text-xs font-bold text-brand-dark/70 mt-1">{ev.Correo}</p>
+                                                                <p className="font-black text-brand-dark text-sm leading-tight uppercase">{getProp(ev, 'Reto') || 'Evidencia'}</p>
+                                                                <p className="text-xs font-bold text-brand-dark/70 mt-1">{getProp(ev, 'Correo')}</p>
                                                             </div>
                                                             <button onClick={() => setAdminEvalEvidencia(ev)} className="w-full sm:w-auto shrink-0 bg-brand-dark text-brand-bg1 px-4 py-2.5 rounded-xl font-black text-[10px] uppercase shadow-md hover:scale-105">Evaluar Prueba</button>
                                                         </div>
@@ -1015,10 +1002,9 @@
                             </div>
                         )}
 
-                        {/* NAVEGACIÓN INFERIOR (Global) */}
                         {user && <BottomNav />}
 
-                        {/* MODALES EXTRAS (SUBIR EVIDENCIA, EDITAR PAGOS, VER BLOG, VER VIDEO) */}
+                        {/* MODALES FLOTANTES */}
                         {uploadingReto && (
                             <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 modal-overlay animate-fade-in">
                                 <div className="bg-[#f0e3d1] w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl relative animate-zoom-in border border-white/20">
@@ -1048,7 +1034,6 @@
                                                 <input type="file" name="imagen" accept="image/*,video/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                                             </div>
                                         )}
-                                        
                                         <button type="submit" disabled={loading} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black uppercase hover:scale-105 shadow-xl transition-transform disabled:opacity-50">{loading ? 'Procesando...' : 'Enviar a Revisión'}</button>
                                     </form>
                                 </div>
@@ -1060,7 +1045,7 @@
                                 <div className="bg-[#f0e3d1] w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl relative animate-zoom-in border border-white/20">
                                     <button type="button" onClick={() => setEditingPayment(null)} className="absolute top-4 right-4 bg-brand-dark/10 text-brand-dark p-2 rounded-full hover:bg-brand-dark/20"><X className="w-4 h-4" /></button>
                                     <h3 className="text-xl font-black uppercase mb-1 text-center text-brand-dark flex items-center justify-center gap-2"><Activity className="w-5 h-5"/> Estado del Atleta</h3>
-                                    <p className="font-bold text-brand-dark/60 mb-6 text-center text-xs uppercase">{editingPayment.Nombres ? `${editingPayment.Nombres} ${editingPayment.Apellidos || ''}` : editingPayment.Correo}</p>
+                                    <p className="font-bold text-brand-dark/60 mb-6 text-center text-xs uppercase">{getProp(editingPayment, 'Nombres') ? `${getProp(editingPayment, 'Nombres')} ${getProp(editingPayment, 'Apellidos') || ''}` : getProp(editingPayment, 'Correo')}</p>
                                     
                                     {successMsg && <div className="bg-green-500 text-white p-3 rounded-xl mb-4 text-xs font-bold text-center shadow-md">{successMsg}</div>}
                                     {errorMsg && <div className="bg-red-500 text-white p-3 rounded-xl mb-4 text-xs font-bold text-center shadow-md">{errorMsg}</div>}
@@ -1068,14 +1053,14 @@
                                     <form onSubmit={handlePaymentUpdate} className="space-y-4">
                                         <div>
                                             <label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Estado</label>
-                                            <select name="Estado" defaultValue={editingPayment.Estado} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-black text-sm text-brand-dark border border-brand-dark/5 shadow-inner">
+                                            <select name="Estado" defaultValue={getProp(editingPayment, 'Estado')} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-black text-sm text-brand-dark border border-brand-dark/5 shadow-inner">
                                                 <option value="Activo">Activo</option>
                                                 <option value="Inactivo">Inactivo</option>
                                             </select>
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Plan Suscrito</label>
-                                            <select name="Plan" defaultValue={editingPayment.Plan} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-bold text-sm text-brand-dark border border-brand-dark/5 shadow-inner">
+                                            <select name="Plan" defaultValue={getProp(editingPayment, 'Plan')} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-bold text-sm text-brand-dark border border-brand-dark/5 shadow-inner">
                                                 <option value="Plan Full - Elementa">Plan Full - Elementa</option>
                                                 <option value="Plan 12 Clases - Elementa">Plan 12 Clases - Elementa</option>
                                                 <option value="Plan Mañanas - Elementa">Plan Mañanas - Elementa</option>
@@ -1086,8 +1071,8 @@
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Fecha de Vencimiento (Caducidad)</label>
-                                            <input type="date" name="Fecha de Caducidad" defaultValue={editingPayment.Caducidad || editingPayment['Fecha de Caducidad'] ? new Date(editingPayment.Caducidad || editingPayment['Fecha de Caducidad']).toISOString().split('T')[0] : ''} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-bold text-sm text-brand-dark border border-brand-dark/5 shadow-inner" />
+                                            <label className="block text-[10px] font-black uppercase mb-1 text-brand-dark">Fecha de Vencimiento</label>
+                                            <input type="date" name="Fecha de Caducidad" defaultValue={getProp(editingPayment, 'Caducidad') || getProp(editingPayment, 'Fecha de Caducidad') ? new Date(getProp(editingPayment, 'Caducidad') || getProp(editingPayment, 'Fecha de Caducidad')).toISOString().split('T')[0] : ''} className="w-full p-3 rounded-xl bg-white/60 focus:bg-white outline-none font-bold text-sm text-brand-dark border border-brand-dark/5 shadow-inner" />
                                         </div>
                                         <div className="mt-6 pt-4 border-t border-brand-dark/10">
                                             <button type="submit" disabled={loading} className="w-full bg-brand-dark text-brand-bg1 p-4 rounded-xl font-black uppercase hover:scale-105 shadow-xl transition-transform text-xs">{loading ? 'Guardando...' : 'Guardar Cambios'}</button>
@@ -1103,19 +1088,19 @@
                                     <button onClick={() => setSelectedPost(null)} className="absolute top-4 right-4 z-30 bg-black/40 backdrop-blur-md text-white p-2 rounded-full shadow-lg hover:bg-black transition-colors"><X className="w-6 h-6" /></button>
                                     
                                     <div className="flex-1 overflow-y-auto hide-scroll bg-brand-bg1">
-                                        {selectedPost.URL_Imagen && (
+                                        {getProp(selectedPost, 'URL_Imagen') && (
                                             <div className="w-full h-64 sm:h-96 relative shadow-md bg-brand-dark">
-                                                <img src={selectedPost.URL_Imagen} className="w-full h-full object-cover" alt="Detalle" />
+                                                <img src={getProp(selectedPost, 'URL_Imagen')} className="w-full h-full object-cover" alt="Detalle" />
                                             </div>
                                         )}
-                                        <div className={`p-6 sm:p-12 ${!selectedPost.URL_Imagen ? 'pt-20' : ''}`}>
+                                        <div className={`p-6 sm:p-12 ${!getProp(selectedPost, 'URL_Imagen') ? 'pt-20' : ''}`}>
                                             <div className="flex gap-3 mb-5">
-                                                <span className="bg-brand-dark text-brand-bg1 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">{selectedPost.Etiqueta || 'Evento'}</span>
-                                                <span className="text-brand-dark/60 text-xs font-bold uppercase py-1.5">{formatearFecha(selectedPost.Fecha)}</span>
+                                                <span className="bg-brand-dark text-brand-bg1 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">{getProp(selectedPost, 'Etiqueta') || 'Evento'}</span>
+                                                <span className="text-brand-dark/60 text-xs font-bold uppercase py-1.5">{formatearFecha(getProp(selectedPost, 'Fecha'))}</span>
                                             </div>
-                                            <h2 className="text-3xl sm:text-5xl font-black text-brand-dark leading-tight mb-8 drop-shadow-sm">{selectedPost.Titulo}</h2>
+                                            <h2 className="text-3xl sm:text-5xl font-black text-brand-dark leading-tight mb-8 drop-shadow-sm">{getProp(selectedPost, 'Titulo')}</h2>
                                             <div className="text-brand-dark/90 font-medium leading-relaxed whitespace-pre-wrap text-base sm:text-lg">
-                                                {selectedPost.Contenido || selectedPost.Descripcion}
+                                                {getProp(selectedPost, 'Contenido') || getProp(selectedPost, 'Descripcion')}
                                             </div>
                                         </div>
                                     </div>
